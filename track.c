@@ -354,7 +354,7 @@ static int doGlobalCPR(struct aircraft *a, struct modesMessage *mm, double *lat,
         // find reference location
         double reflat, reflon;
 
-        if (trackDataValid(&a->position_valid)) { // Ok to try aircraft relative first
+        if (trackDataValid(&a->position_valid) || a->pos_set) { // Ok to try aircraft relative first
             reflat = a->lat;
             reflon = a->lon;
         } else if (Modes.bUserFlags & MODES_USER_LATLON_VALID) {
@@ -595,6 +595,7 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
                     a->pos_reliable_odd = min(a->pos_reliable_odd + 1, Modes.filter_persistence);
                 } else {
                     a->pos_reliable_even = min(a->pos_reliable_even + 1, Modes.filter_persistence);
+                    a->pos_set = 1;
                 }
 
                 if (trackDataValid(&a->gs_valid))
@@ -1441,7 +1442,9 @@ static void trackRemoveStaleAircraft(uint64_t now) {
 
         while (a) {
             if ((now - a->seen) > TRACK_AIRCRAFT_TTL ||
-                    (a->messages == 1 && (now - a->seen) > TRACK_AIRCRAFT_ONEHIT_TTL)) {
+                    (a->messages == 1 && (now - a->seen) > TRACK_AIRCRAFT_ONEHIT_TTL) ||
+                    ((a->addr & MODES_NON_ICAO_ADDRESS) && (now - a->seen) > TRACK_AIRCRAFT_NON_ICAO_TTL)
+               ) {
                 // Count aircraft where we saw only one message before reaping them.
                 // These are likely to be due to messages with bad addresses.
                 if (a->messages == 1)

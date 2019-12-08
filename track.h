@@ -55,7 +55,11 @@
 #define DUMP1090_TRACK_H
 
 /* Maximum age of tracked aircraft in milliseconds */
-#define TRACK_AIRCRAFT_TTL (10*60000)
+#define TRACK_AIRCRAFT_TTL (18*60*60000)
+// 18 hours should cover most few turn-arounds.
+
+#define TRACK_AIRCRAFT_NON_ICAO_TTL (1*60*60000)
+// 1 hour for NON_ICAO aircraft
 
 /* Maximum age of a tracked aircraft with only 1 message received, in milliseconds */
 #define TRACK_AIRCRAFT_ONEHIT_TTL 60000
@@ -182,6 +186,7 @@ struct aircraft
   unsigned pos_rc; // Rc of last computed position
   int pos_reliable_odd; // Number of good global CPRs, indicates position reliability
   int pos_reliable_even;
+  int pos_set;
   float gs_last_pos; // Save a groundspeed associated with the last position
 
   // data extracted from opstatus etc
