@@ -91,16 +91,35 @@ typedef struct
   uint32_t padding;
 } data_validity;
 
+/* Structure representing one point in the aircraft trace */
+struct state
+{
+  int32_t lat;
+  int32_t lon;
+  uint64_t timestamp;
+  int32_t altitude;
+  float gs;
+  float track;
+};
+
 /* Structure used to describe the state of one tracked aircraft */
 struct aircraft
 {
+  struct aircraft *next; // Next aircraft in our linked list
   uint32_t addr; // ICAO address
   addrtype_t addrtype; // highest priority address type seen for this aircraft
   uint64_t seen; // Time (millis) at which the last packet was received
+  uint64_t seen_pos; // Time (millis) at which the last position was received
   uint64_t fatsv_last_emitted; // time (millis) aircraft was last FA emitted
   uint64_t fatsv_last_force_emit; // time (millis) we last emitted only-on-change data
   double signalLevel[8]; // Last 8 Signal Amplitudes
   long messages; // Number of Mode S messages received
+  struct state *trace; // array of positions representing the aircrafts trace/trail
+  uint32_t trace_len; // current number of points in the trace
+  uint32_t trace_len_last_write; // number of points in the trace at time of last write
+  double trace_llat; // last saved lat
+  double trace_llon; // last saved lon
+  pthread_mutex_t *trace_mutex;
   int signalNext; // next index of signalLevel to use
   int altitude_baro; // Altitude (Baro)
   int altitude_baro_reliable;
@@ -188,6 +207,7 @@ struct aircraft
   int pos_reliable_even;
   int pos_set;
   float gs_last_pos; // Save a groundspeed associated with the last position
+  int globe_index; // custom index of the planes area on the globe
 
   // data extracted from opstatus etc
   int adsb_version; // ADS-B version (from ADS-B operational status); -1 means no ADS-B messages seen
@@ -247,7 +267,6 @@ struct aircraft
   emergency_t fatsv_emitted_emergency; //      -"-         emergency/priority status
   uint32_t padding2;
   struct modesMessage first_message; // A copy of the first message we received for this aircraft.
-  struct aircraft *next; // Next aircraft in our linked list
 };
 
 /* Mode A/C tracking is done separately, not via the aircraft list,

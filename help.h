@@ -68,6 +68,7 @@ static struct argp_option options[] =
         {"write-json", OptJsonDir, "<dir>", 0, "Periodically write json output to <dir> (for external webserver)", 1},
         {"write-json-every", OptJsonTime, "<t>", 0, "Write json output every t seconds (default 1)", 1},
         {"json-location-accuracy", OptJsonLocAcc , "<n>", 0, "Accuracy of receiver location in json metadata: 0=no location, 1=approximate, 2=exact", 1},
+        {"write-json-globe-index", OptJsonGlobeIndex, 0, 0, "Write specially indexed globe_xxxx.json files (for tar1090)", 1},
     #endif
 #endif
     {0,0,0,0, "Network options:", 2},

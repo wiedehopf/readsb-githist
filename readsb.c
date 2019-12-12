@@ -289,6 +289,51 @@ void *readerThreadEntryPoint(void *arg) {
     return NULL;
 #endif
 }
+
+void *jsonThreadEntryPoint(void *arg) {
+    MODES_NOTUSED(arg);
+
+    while (!Modes.exit) {
+        struct timespec slp = {0, 20 * 1000 * 1000};
+        static uint64_t next_trace_json;
+        uint64_t now = mstime();
+        if (Modes.json_dir && Modes.json_globe_index && now >= next_trace_json) {
+            static uint32_t part;
+            uint32_t n_parts = 256;
+            char filename[32];
+            struct aircraft *a;
+
+            next_trace_json = now + 30*1000 / n_parts;
+
+            for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
+                if (j % n_parts == part) {
+                    for (a = Modes.aircrafts[j]; a; a = a->next) {
+                        if (a->trace_len == a->trace_len_last_write)
+                            continue;
+                        pthread_mutex_lock(a->trace_mutex);
+
+                        a->trace_len_last_write = a->trace_len;
+                        snprintf(filename, 31, "icao_%s%06x.json", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                        writeJsonToFile(filename, generateTraceJson(a));
+
+                        pthread_mutex_unlock(a->trace_mutex);
+                    }
+                }
+            }
+            if (++part >= n_parts) {
+                part = 0;
+            }
+        }
+
+        nanosleep(&slp, NULL);
+    }
+
+#ifndef _WIN32
+    pthread_exit(NULL);
+#else
+    return NULL;
+#endif
+}
 //
 // ============================== Snip mode =================================
 //
@@ -327,7 +372,7 @@ static void display_total_stats(void) {
 static void backgroundTasks(void) {
     static uint64_t next_stats_display;
     static uint64_t next_stats_update;
-    static uint64_t next_json, next_history;
+    static uint64_t next_json, next_history, next_globe_json;
 
     uint64_t now = mstime();
 
@@ -393,16 +438,43 @@ static void backgroundTasks(void) {
         }
     }
 
-    if (Modes.json_dir && now >= next_json) {
-        writeJsonToFile("aircraft.json", generateAircraftJson());
+
+    if (Modes.json_dir && now >= next_json && !Modes.json_globe_index) {
+        writeJsonToFile("aircraft.json", generateAircraftJson(-1));
         next_json = now + Modes.json_interval;
-        //writeJsonToFile("vrs.json", generateVRS(0, 1));
     }
 
-    if (Modes.json_dir && now >= next_history) {
+    if (Modes.json_dir && Modes.json_globe_index && now >= next_globe_json) {
+        static uint32_t part;
+        uint32_t n_parts = 16;
+        char filename[32];
+
+        next_globe_json = now + Modes.json_interval / n_parts;
+
+        for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
+            if (i % n_parts == part) {
+                snprintf(filename, 31, "globe_%04d.json", i);
+                writeJsonToFile(filename, generateAircraftJson(i));
+            }
+        }
+        for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
+            if (i % n_parts == part) {
+                if (globe_index_index(i) >= GLOBE_MIN_INDEX) {
+                    snprintf(filename, 31, "globe_%04d.json", i);
+                    writeJsonToFile(filename, generateAircraftJson(i));
+                }
+            }
+        }
+        //fprintf(stderr, "%u\n", part);
+        if (++part >= n_parts) {
+            part = 0;
+        }
+    }
+
+    if (Modes.json_dir && now >= next_history && !Modes.json_globe_index) {
         char filebuf[PATH_MAX];
         snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
-        writeJsonToFile(filebuf, generateAircraftJson());
+        writeJsonToFile(filebuf, generateAircraftJson(-1));
 
         if (!Modes.json_aircraft_history_full) {
             writeJsonToFile("receiver.json", generateReceiverJson()); // number of history entries changed
@@ -436,12 +508,23 @@ static void cleanup_and_exit(int code) {
     free(Modes.net_output_sbs_ports);
     free(Modes.net_input_sbs_ports);
     free(Modes.beast_serial);
+    free(Modes.json_globe_special_tiles);
     /* Go through tracked aircraft chain and free up any used memory */
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         struct aircraft *a = Modes.aircrafts[j], *na;
         while (a) {
             na = a->next;
-            if (a) free(a);
+            if (a) {
+                if (a->trace_mutex) {
+                    pthread_mutex_unlock(a->trace_mutex);
+                    pthread_mutex_destroy(a->trace_mutex);
+                    free(a->trace_mutex);
+                }
+                if (a->trace) {
+                    free(a->trace);
+                }
+                free(a);
+            }
             a = na;
         }
     }
@@ -605,6 +688,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             break;
         case OptJsonLocAcc:
             Modes.json_location_accuracy = atoi(arg);
+            break;
+        case OptJsonGlobeIndex:
+            Modes.json_globe_index = 1;
+            Modes.json_globe_special_tiles = calloc(GLOBE_SPECIAL_INDEX, sizeof(struct tile));
+            if (!Modes.json_globe_special_tiles)
+                return 1;
+            init_globe_index(Modes.json_globe_special_tiles);
             break;
 #endif
         case OptNetHeartbeat:
@@ -832,7 +922,7 @@ int main(int argc, char **argv) {
     // write initial json files so they're not missing
     writeJsonToFile("receiver.json", generateReceiverJson());
     writeJsonToFile("stats.json", generateStatsJson());
-    writeJsonToFile("aircraft.json", generateAircraftJson());
+    writeJsonToFile("aircraft.json", generateAircraftJson(-1));
 
     interactiveInit();
 
@@ -840,12 +930,17 @@ int main(int argc, char **argv) {
      * clients without reading data from the RTL device.
      * This rules also in case a local Mode-S Beast is connected via USB.
      */
+
+    if (Modes.json_globe_index) {
+        pthread_create(&Modes.json_thread, NULL, jsonThreadEntryPoint, NULL);
+    }
+
     if (Modes.sdr_type == SDR_NONE || Modes.sdr_type == SDR_MODESBEAST || Modes.sdr_type == SDR_GNS) {
         int64_t background_cpu_millis = 0;
         int64_t prev_cpu_millis = 0;
         struct timespec slp = {0, 20 * 1000 * 1000};
         while (!Modes.exit) {
-            int64_t sleep_millis = 100;
+            int64_t sleep_millis = 50;
             struct timespec start_time;
 
             prev_cpu_millis = background_cpu_millis;
@@ -943,6 +1038,10 @@ int main(int argc, char **argv) {
         pthread_join(Modes.reader_thread, NULL); // Wait on reader thread exit
         pthread_cond_destroy(&Modes.data_cond); // Thread cleanup - only after the reader thread is dead!
         pthread_mutex_destroy(&Modes.data_mutex);
+    }
+
+    if (Modes.json_globe_index) {
+        pthread_join(Modes.json_thread, NULL); // Wait on json writer thread exit
     }
 
     // If --stats were given, print statistics

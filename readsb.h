@@ -273,6 +273,8 @@ typedef enum {
 
 #define AIRCRAFTS_BUCKETS (1<<16)
 
+#define GLOBE_TRACE_SIZE 2048
+
 // Include subheaders after all the #defines are in place
 
 #include "util.h"
@@ -285,6 +287,7 @@ typedef enum {
 #include "icao_filter.h"
 #include "convert.h"
 #include "sdr.h"
+#include "globe_index.h"
 
 //======================== structure declarations =========================
 
@@ -317,6 +320,7 @@ struct
   pthread_cond_t data_cond; // Conditional variable associated
   pthread_t reader_thread;
   pthread_mutex_t data_mutex; // Mutex to synchronize buffer access
+  pthread_t json_thread; // thread writing json
   unsigned first_free_buffer; // Entry in mag_buffers that will next be filled with input.
   unsigned first_filled_buffer; // Entry in mag_buffers that has valid data and will be demodulated next. If equal to next_free_buffer, there is no unprocessed data.
   unsigned trailing_samples; // extra trailing samples in magnitude buffers
@@ -385,6 +389,8 @@ struct
   char *filename; // Input form file, --ifile option
   char *net_bind_address; // Bind address
   char *json_dir; // Path to json base directory, or NULL not to write json.
+  int json_globe_index; // Enable extra globe indexed json files.
+  struct tile *json_globe_special_tiles;
   char *beast_serial; // Modes-S Beast device path
 #if defined(__arm__)
   uint32_t padding;
@@ -667,6 +673,7 @@ enum {
   OptJsonDir,
   OptJsonTime,
   OptJsonLocAcc,
+  OptJsonGlobeIndex,
   OptDcFilter,
   OptBiasTee,
   OptNet,

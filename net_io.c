@@ -63,7 +63,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <poll.h>
-#include <pthread.h>
 
 //
 // ============================= Networking =============================
@@ -511,7 +510,6 @@ void modesInitNet(void) {
             con->service = sbs_out;
         else if (strcmp(con->protocol, "sbs_in") == 0)
             con->service = sbs_in;
-
 
         con->mutex = malloc(sizeof(pthread_mutex_t));
         if (!con->mutex || pthread_mutex_init(con->mutex, NULL)) {
@@ -1822,7 +1820,7 @@ static const char *nav_altitude_source_enum_string(nav_altitude_source_t src) {
     }
 }
 
-struct char_buffer generateAircraftJson(){
+struct char_buffer generateAircraftJson(int globe_index){
     struct char_buffer cb;
     uint64_t now = mstime();
     struct aircraft *a;
@@ -1835,10 +1833,41 @@ struct char_buffer generateAircraftJson(){
 
     p = safe_snprintf(p, end,
             "{ \"now\" : %.1f,\n"
-            "  \"messages\" : %u,\n"
-            "  \"aircraft\" : [",
+            "  \"messages\" : %u,\n",
             now / 1000.0,
             Modes.stats_current.messages_total + Modes.stats_alltime.messages_total);
+
+    if (globe_index >= 0) {
+        p = safe_snprintf(p, end, "  \"globeIndex\" : %d, ", globe_index);
+        if (globe_index >= GLOBE_MIN_INDEX) {
+            int grid = GLOBE_INDEX_GRID;
+            int lat = ((globe_index - GLOBE_MIN_INDEX) / GLOBE_LAT_MULT) * grid - 90;
+            int lon = ((globe_index - GLOBE_MIN_INDEX) % GLOBE_LAT_MULT) * grid - 180;
+            p = safe_snprintf(p, end,
+                    "\"south\" : %d, "
+                    "\"west\" : %d, "
+                    "\"north\" : %d, "
+                    "\"east\" : %d,\n",
+                    lat,
+                    lon,
+                    lat + grid,
+                    lon + grid);
+        } else {
+            struct tile *tiles = Modes.json_globe_special_tiles;
+            struct tile tile = tiles[globe_index];
+            p = safe_snprintf(p, end,
+                    "\"south\" : %d, "
+                    "\"west\" : %d, "
+                    "\"north\" : %d, "
+                    "\"east\" : %d,\n",
+                    tile.south,
+                    tile.west,
+                    tile.north,
+                    tile.east);
+        }
+    }
+
+    p = safe_snprintf(p, end, "  \"aircraft\" : [");
 
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         for (a = Modes.aircrafts[j]; a; a = a->next) {
@@ -1846,6 +1875,9 @@ struct char_buffer generateAircraftJson(){
                 continue;
             }
             if ((now - a->seen) > 90E3) // don't include stale aircraft in the JSON
+                continue;
+
+            if (globe_index >= 0 && a->globe_index != globe_index)
                 continue;
 
             if (first)
@@ -1955,6 +1987,45 @@ retry:
     }
 
     p = safe_snprintf(p, end, "\n  ]\n}\n");
+
+    cb.len = p - buf;
+    cb.buffer = buf;
+    return cb;
+}
+
+struct char_buffer generateTraceJson(struct aircraft *a) {
+    struct char_buffer cb;
+    int buflen = a->trace_len * 80 + 1024;
+    char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
+
+    p = safe_snprintf(p, end, "{\"icao\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+
+    if (a->trace_len > 0 && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
+        p = safe_snprintf(p, end, ",\n\"timestamp\": %.3f", a->trace->timestamp / 1000.0);
+
+        p = safe_snprintf(p, end, ",\n\"trace\":[ ");
+
+        for (uint32_t i = 0; i < a->trace_len; i++) {
+            struct state *trace = &a->trace[i];
+            if (trace->altitude != -(2<<13)) {
+                // in the air
+                p = safe_snprintf(p, end, "[%.1f,%f,%f,%d,%.1f,%.1f],",
+                        (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6,
+                        trace->altitude, trace->gs, trace->track);
+            } else {
+                // on the ground
+                p = safe_snprintf(p, end, "[%.1f,%f,%f,%s,%.1f,%.1f],",
+                        (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6,
+                        "\"ground\"" , trace->gs, trace->track);
+            }
+        }
+
+        p--; // remove last comma
+
+        p = safe_snprintf(p, end, " ]\n");
+    }
+
+    p = safe_snprintf(p, end, " }\n");
 
     cb.len = p - buf;
     cb.buffer = buf;
@@ -2113,29 +2184,46 @@ struct char_buffer generateStatsJson() {
 //
 struct char_buffer generateReceiverJson() {
     struct char_buffer cb;
-    char *buf = (char *) malloc(1024), *p = buf;
+    size_t buflen = 4096;
+    char *buf = (char *) malloc(buflen), *p = buf;
 
-    p += snprintf(p, 1024, "{ " \
-            "\"version\" : \"%s\", "
+    p += snprintf(p, buflen, "{ " \
             "\"refresh\" : %.0f, "
             "\"history\" : %d",
-            MODES_READSB_VERSION, 1.0 * Modes.json_interval, Modes.json_aircraft_history_next + 1 );
+            1.0 * Modes.json_interval, Modes.json_aircraft_history_next + 1);
+
+    if (Modes.json_globe_index) {
+        p += snprintf(p, buflen, ", \"globeIndexGrid\" : %d", GLOBE_INDEX_GRID);
+
+        p += snprintf(p, buflen, ", \"globeIndexSpecialTiles\" : [ ");
+        struct tile *tiles = Modes.json_globe_special_tiles;
+
+        for (int i = 0; tiles[i].south != 0 || tiles[i].north != 0; i++) {
+            struct tile tile = tiles[i];
+            p += snprintf(p, buflen, "{ \"south\" : %d, ", tile.south);
+            p += snprintf(p, buflen, "\"east\" : %d, ", tile.east);
+            p += snprintf(p, buflen, "\"north\" : %d, ", tile.north);
+            p += snprintf(p, buflen, "\"west\" : %d }, ", tile.west);
+        }
+        p -= 2; // get rid of comma and space at the end
+        p += snprintf(p, buflen, " ]");
+    }
 
     if (Modes.json_location_accuracy && (Modes.fUserLat != 0.0 || Modes.fUserLon != 0.0)) {
         if (Modes.json_location_accuracy == 1) {
-            p += snprintf(p, 1024, ", "                \
+            p += snprintf(p, buflen, ", "                \
                     "\"lat\" : %.2f, "
                     "\"lon\" : %.2f",
                     Modes.fUserLat, Modes.fUserLon); // round to 2dp - about 0.5-1km accuracy - for privacy reasons
         } else {
-            p += snprintf(p, 1024, ", "                \
+            p += snprintf(p, buflen, ", "                \
                     "\"lat\" : %.6f, "
                     "\"lon\" : %.6f",
                     Modes.fUserLat, Modes.fUserLon); // exact location
         }
     }
 
-    p += snprintf(p, 1024, " }\n");
+    p += snprintf(p, 1024, ", \"version\" : \"%s\" }\n", MODES_READSB_VERSION);
 
     cb.len = p - buf;
     cb.buffer = buf;

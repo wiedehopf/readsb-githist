@@ -61,6 +61,8 @@ uint32_t modeAC_lastcount[4096];
 uint32_t modeAC_match[4096];
 uint32_t modeAC_age[4096];
 
+static void cleanupAircraft(struct aircraft *a);
+
 //
 // Return a new aircraft structure for the linked list of tracked
 // aircraft
@@ -100,6 +102,14 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
 
     // Copy the first message so we can emit it later when a second message arrives.
     a->first_message = *mm;
+
+    if (Modes.json_globe_index) {
+        a->trace_mutex = malloc(sizeof(pthread_mutex_t));
+        if (!a->trace_mutex || pthread_mutex_init(a->trace_mutex, NULL)) {
+            fprintf(stderr, "Unable to initialize trace mutex!\n");
+            exit(1);
+        }
+    }
 
     // initialize data validity ages
 #define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
@@ -644,6 +654,93 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
         a->lon = new_lon;
         a->pos_nic = new_nic;
         a->pos_rc = new_rc;
+
+        if (Modes.json_globe_index) {
+            uint64_t now = mm->sysTimestampMsg;
+            static uint32_t count;
+
+            a->globe_index = globe_index(new_lat, new_lon);
+            if (!a->trace) {
+                a->trace = malloc(GLOBE_TRACE_SIZE * sizeof(struct state));
+                a->trace->timestamp = now;
+            }
+
+            struct state *trace = a->trace;
+            if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + 24 * 3600 * 1000) {
+                pthread_mutex_lock(a->trace_mutex);
+                a->trace_len = (a->trace_len > 100) ? (a->trace_len - 100) : 0;
+                memmove(trace, trace + 100, a->trace_len * sizeof(struct state));
+                pthread_mutex_unlock(a->trace_mutex);
+            }
+
+            struct state *new = &(trace[a->trace_len]);
+            int on_ground = 0;
+
+            if (a->trace_len == 0 )
+                goto save_state;
+
+            struct state *last = &(trace[a->trace_len-1]);
+
+
+            // FOR DEBUGGING ONLY
+            if (now > last->timestamp + 149 * 1000 )
+                goto save_state;
+
+            double distance = greatcircle(a->trace_llat, a->trace_llon, new_lat, new_lon);
+            if (distance < 40 || now < last->timestamp + 4 * 1000 )
+                goto no_save_state;
+
+            if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND) {
+                on_ground = 1;
+                if (distance * fabs(a->track - last->track) > 200)
+                    goto save_state;
+
+                if (distance > 400)
+                    goto save_state;
+            }
+
+            if (now > last->timestamp + 70 * 1000 ) {
+                goto save_state;
+            }
+
+            if (now > last->timestamp + 5 * 1000 && fabs(a->track - last->track) > 1) {
+                goto save_state;
+            }
+
+            if (abs(a->altitude_baro - last->altitude) > 300) {
+                goto save_state;
+            }
+
+            if (now > a->seen_pos + 15 * 1000) {
+                goto save_state;
+            }
+
+            goto no_save_state;
+save_state:
+            a->trace_llat = new_lat;
+            a->trace_llon = new_lon;
+            new->lat = (int32_t) (new_lat * 1E6);
+            new->lon = (int32_t) (new_lon * 1E6);
+            new->timestamp = now;
+            new->altitude = on_ground ? -(2<<13) : a->altitude_baro;
+            new->gs = a->gs;
+
+            if (now < a->seen_pos + 15 * 1000) {
+                new->track = a->track;
+            } else {
+                new->track = a->track + 1000;
+            }
+
+            (a->trace_len)++;
+            count++;
+            //fprintf(stderr, "%u\n", a->trace_len);
+            //if (count++ % 1000 == 0)
+            //   fprintf(stderr, "%u\n", a->trace_len);
+no_save_state:
+            ;
+        }
+
+        a->seen_pos = mm->sysTimestampMsg;
 
         if (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2 && mm->source == SOURCE_ADSB) {
             update_range_histogram(new_lat, new_lon);
@@ -1454,11 +1551,11 @@ static void trackRemoveStaleAircraft(uint64_t now) {
                 // if we are removing the first element
                 if (!prev) {
                     Modes.aircrafts[j] = a->next;
-                    free(a);
+                    cleanupAircraft(a);
                     a = Modes.aircrafts[j];
                 } else {
                     prev->next = a->next;
-                    free(a);
+                    cleanupAircraft(a);
                     a = prev->next;
                 }
             } else {
@@ -1529,5 +1626,22 @@ void trackPeriodicUpdate() {
         next_update = now + 1000;
         trackRemoveStaleAircraft(now);
         trackMatchAC(now);
+    }
+}
+
+static void cleanupAircraft(struct aircraft *a) {
+    if (a) {
+        if (a->trace_mutex) {
+            char filename[32];
+            snprintf(filename, 31, "icao_%s%06x.json", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            unlink(filename);
+            pthread_mutex_unlock(a->trace_mutex);
+            pthread_mutex_destroy(a->trace_mutex);
+            free(a->trace_mutex);
+        }
+        if (a->trace) {
+            free(a->trace);
+        }
+        free(a);
     }
 }
