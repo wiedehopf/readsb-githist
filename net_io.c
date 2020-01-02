@@ -299,7 +299,10 @@ struct client *serviceConnect(struct net_connector *con) {
         if (!con->gai_request_in_progress)  {
             // launch a pthread for async getaddrinfo
             con->try_addr = NULL;
-            freeaddrinfo(con->addr_info);
+            if (con->addr_info) {
+                freeaddrinfo(con->addr_info);
+                con->addr_info = NULL;
+            }
 
             if (pthread_create(&con->thread, NULL, pthreadGetaddrinfo, con)) {
                 con->next_reconnect = mstime() + 500;
@@ -962,7 +965,10 @@ static int decodeSbsLine(struct client *c, char *line, int remote) {
     // record reception time as the time we read it.
     mm.sysTimestampMsg = mstime();
 
-    //fprintf(stderr, "%d, %0.5f, %0.5f\n", mm.altitude_baro, mm.decoded_lat, mm.decoded_lon);
+    /*
+    if (mm.addr % 13 == 0)
+        fprintf(stderr, "%x: %d, %0.5f, %0.5f\n", mm.addr, mm.altitude_baro, mm.decoded_lat, mm.decoded_lon);
+    */
     useModesMessage(&mm);
 
     return 0;
@@ -1880,6 +1886,8 @@ struct char_buffer generateAircraftJson(int globe_index){
             if (globe_index >= 0 && a->globe_index != globe_index)
                 continue;
 
+            pthread_mutex_lock(a->mutex);
+
             if (first)
                 first = 0;
             else
@@ -1983,6 +1991,7 @@ retry:
                 end = buf + buflen;
                 goto retry;
             }
+            pthread_mutex_unlock(a->mutex);
         }
     }
 

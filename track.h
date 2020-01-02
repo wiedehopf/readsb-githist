@@ -105,7 +105,7 @@ struct state
 /* Structure used to describe the state of one tracked aircraft */
 struct aircraft
 {
-  struct aircraft *next; // Next aircraft in our linked list
+  struct aircraft * volatile next; // Next aircraft in our linked list (pointer is volatile)
   uint32_t addr; // ICAO address
   addrtype_t addrtype; // highest priority address type seen for this aircraft
   uint64_t seen; // Time (millis) at which the last packet was received
@@ -119,7 +119,9 @@ struct aircraft
   uint32_t trace_len_last_write; // number of points in the trace at time of last write
   double trace_llat; // last saved lat
   double trace_llon; // last saved lon
+  pthread_mutex_t *mutex;
   pthread_mutex_t *trace_mutex;
+  int destroy; // aircraft is being deleted
   int signalNext; // next index of signalLevel to use
   int altitude_baro; // Altitude (Baro)
   int altitude_baro_reliable;

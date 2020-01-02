@@ -57,6 +57,7 @@
 
 #include <stdarg.h>
 
+static void backgroundTasks(void);
 //
 // ============================= Program options help ==========================
 //
@@ -124,6 +125,12 @@ static void log_with_timestamp(const char *format, ...) {
 
 static void sigintHandler(int dummy) {
     MODES_NOTUSED(dummy);
+    if (Modes.decodeThread)
+        pthread_kill(Modes.decodeThread, SIGUSR1);
+    if (Modes.jsonThread)
+        pthread_kill(Modes.jsonThread, SIGUSR1);
+    if (Modes.jsonTraceThread)
+        pthread_kill(Modes.jsonTraceThread, SIGUSR1);
     signal(SIGINT, SIG_DFL); // reset signal handler - bit extra safety
     Modes.exit = 1; // Signal to threads that we are done
     log_with_timestamp("Caught SIGINT, shutting down..\n");
@@ -131,6 +138,12 @@ static void sigintHandler(int dummy) {
 
 static void sigtermHandler(int dummy) {
     MODES_NOTUSED(dummy);
+    if (Modes.decodeThread)
+        pthread_kill(Modes.decodeThread, SIGUSR1);
+    if (Modes.jsonThread)
+        pthread_kill(Modes.jsonThread, SIGUSR1);
+    if (Modes.jsonTraceThread)
+        pthread_kill(Modes.jsonTraceThread, SIGUSR1);
     signal(SIGTERM, SIG_DFL); // reset signal handler - bit extra safety
     Modes.exit = 1; // Signal to threads that we are done
     log_with_timestamp("Caught SIGTERM, shutting down..\n");
@@ -187,6 +200,10 @@ static void modesInit(void) {
 
     pthread_mutex_init(&Modes.data_mutex, NULL);
     pthread_cond_init(&Modes.data_cond, NULL);
+
+    pthread_mutex_init(&Modes.decodeThreadMutex, NULL);
+    pthread_mutex_init(&Modes.jsonThreadMutex, NULL);
+    pthread_mutex_init(&Modes.jsonTraceThreadMutex, NULL);
 
     Modes.sample_rate = (double)2400000.0;
 
@@ -268,7 +285,7 @@ static int thread_to_core(int core_id) {
 // We read data using a thread, so the main thread only handles decoding
 // without caring about data acquisition
 //
-void *readerThreadEntryPoint(void *arg) {
+static void *readerThreadEntryPoint(void *arg) {
     MODES_NOTUSED(arg);
 
     // Try sticking this thread to core 3
@@ -290,43 +307,271 @@ void *readerThreadEntryPoint(void *arg) {
 #endif
 }
 
-void *jsonThreadEntryPoint(void *arg) {
+static void *jsonThreadEntryPoint(void *arg) {
     MODES_NOTUSED(arg);
 
-    while (!Modes.exit) {
-        struct timespec slp = {0, 20 * 1000 * 1000};
-        static uint64_t next_trace_json;
-        uint64_t now = mstime();
-        if (Modes.json_dir && Modes.json_globe_index && now >= next_trace_json) {
-            static uint32_t part;
-            uint32_t n_parts = 256;
+    struct timespec slp = {0, 0};
+    slp.tv_sec =  (Modes.json_interval / 1000);
+    slp.tv_nsec = (Modes.json_interval % 1000) * 1000 * 1000;
+
+
+    pthread_mutex_lock(&Modes.jsonThreadMutex);
+
+    if (!Modes.json_globe_index) {
+        uint64_t next_history = mstime();
+
+        while (!Modes.exit) {
+
+            pthread_mutex_unlock(&Modes.jsonThreadMutex);
+
+            nanosleep(&slp, NULL);
+
+            pthread_mutex_lock(&Modes.jsonThreadMutex);
+
+            uint64_t now = mstime();
+
+            writeJsonToFile("aircraft.json", generateAircraftJson(-1));
+
+            if (now >= next_history) {
+                char filebuf[PATH_MAX];
+
+                snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
+                writeJsonToFile(filebuf, generateAircraftJson(-1));
+
+                if (!Modes.json_aircraft_history_full) {
+                    writeJsonToFile("receiver.json", generateReceiverJson()); // number of history entries changed
+                    if (Modes.json_aircraft_history_next == HISTORY_SIZE - 1)
+                        Modes.json_aircraft_history_full = 1;
+                }
+
+                Modes.json_aircraft_history_next = (Modes.json_aircraft_history_next + 1) % HISTORY_SIZE;
+                next_history = now + HISTORY_INTERVAL;
+            }
+        }
+    } else {
+
+        while (!Modes.exit) {
             char filename[32];
-            struct aircraft *a;
 
-            next_trace_json = now + 30*1000 / n_parts;
+            pthread_mutex_unlock(&Modes.jsonThreadMutex);
 
-            for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
-                if (j % n_parts == part) {
-                    for (a = Modes.aircrafts[j]; a; a = a->next) {
-                        if (a->trace_len == a->trace_len_last_write)
-                            continue;
-                        pthread_mutex_lock(a->trace_mutex);
+            nanosleep(&slp, NULL);
 
-                        a->trace_len_last_write = a->trace_len;
-                        snprintf(filename, 31, "icao_%s%06x.json", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                        writeJsonToFile(filename, generateTraceJson(a));
+            pthread_mutex_lock(&Modes.jsonThreadMutex);
 
-                        pthread_mutex_unlock(a->trace_mutex);
-                    }
+            for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
+                snprintf(filename, 31, "globe_%04d.json", i);
+                writeJsonToFile(filename, generateAircraftJson(i));
+            }
+            for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
+                if (globe_index_index(i) >= GLOBE_MIN_INDEX) {
+                    snprintf(filename, 31, "globe_%04d.json", i);
+                    writeJsonToFile(filename, generateAircraftJson(i));
                 }
             }
-            if (++part >= n_parts) {
-                part = 0;
+        }
+    }
+
+    pthread_mutex_unlock(&Modes.jsonThreadMutex);
+
+#ifndef _WIN32
+    pthread_exit(NULL);
+#else
+    return NULL;
+#endif
+}
+
+static void *jsonTraceThreadEntryPoint(void *arg) {
+    MODES_NOTUSED(arg);
+
+    static int part;
+    int n_parts = 64; // power of 2
+
+    struct timespec slp = {0, 0};
+    // write each part every 25 seconds
+    uint64_t sleep = 25 * 1000 / n_parts;
+
+    slp.tv_sec =  (sleep / 1000);
+    slp.tv_nsec = (sleep % 1000) * 1000 * 1000;
+
+
+
+    pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
+
+    while (!Modes.exit) {
+        char filename[32];
+        struct aircraft *a;
+
+        pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+
+        nanosleep(&slp, NULL);
+
+        pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
+
+        int start = part * (AIRCRAFTS_BUCKETS / n_parts);
+        int end = (part + 1) * (AIRCRAFTS_BUCKETS / n_parts);
+
+        for (int j = start; j < end; j++) {
+            for (a = Modes.aircrafts[j]; a; a = a->next) {
+                if (a->trace_len == a->trace_len_last_write)
+                    continue;
+                pthread_mutex_lock(a->trace_mutex);
+
+                a->trace_len_last_write = a->trace_len;
+                snprintf(filename, 31, "icao_%s%06x.json", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                writeJsonToFile(filename, generateTraceJson(a));
+
+                pthread_mutex_unlock(a->trace_mutex);
             }
         }
 
-        nanosleep(&slp, NULL);
+        part++;
+        part %= n_parts;
+
     }
+
+    pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+
+#ifndef _WIN32
+    pthread_exit(NULL);
+#else
+    return NULL;
+#endif
+}
+static void *decodeThreadEntryPoint(void *arg) {
+    MODES_NOTUSED(arg);
+
+    pthread_mutex_lock(&Modes.decodeThreadMutex);
+
+    /* On a multi-core CPU we run the main thread and reader thread on different cores.
+     * Try sticking the main thread to core 1
+     */
+    thread_to_core(1);
+
+    /* If the user specifies --net-only, just run in order to serve network
+     * clients without reading data from the RTL device.
+     * This rules also in case a local Mode-S Beast is connected via USB.
+     */
+
+    if (Modes.sdr_type == SDR_NONE || Modes.sdr_type == SDR_MODESBEAST || Modes.sdr_type == SDR_GNS) {
+        int64_t background_cpu_millis = 0;
+        int64_t prev_cpu_millis = 0;
+        struct timespec slp = {0, 20 * 1000 * 1000};
+        while (!Modes.exit) {
+            int64_t sleep_millis = 50;
+            struct timespec start_time;
+
+            prev_cpu_millis = background_cpu_millis;
+
+            start_cpu_timing(&start_time);
+            backgroundTasks();
+            end_cpu_timing(&start_time, &Modes.stats_current.background_cpu);
+
+            background_cpu_millis = (int64_t) Modes.stats_current.background_cpu.tv_sec * 1000UL +
+                Modes.stats_current.background_cpu.tv_nsec / 1000000UL;
+            sleep_millis = sleep_millis - (background_cpu_millis - prev_cpu_millis);
+            sleep_millis = (sleep_millis <= 20) ? 20 : sleep_millis;
+
+            //fprintf(stderr, "%ld\n", sleep_millis);
+
+            slp.tv_nsec = sleep_millis * 1000 * 1000;
+
+            pthread_mutex_unlock(&Modes.decodeThreadMutex);
+
+            nanosleep(&slp, NULL);
+
+            pthread_mutex_lock(&Modes.decodeThreadMutex);
+        }
+    } else {
+        int watchdogCounter = 10; // about 1 second
+
+        // Create the thread that will read the data from the device.
+        pthread_mutex_lock(&Modes.data_mutex);
+        pthread_create(&Modes.reader_thread, NULL, readerThreadEntryPoint, NULL);
+
+        while (!Modes.exit) {
+            struct timespec start_time;
+
+            if (Modes.first_free_buffer == Modes.first_filled_buffer) {
+                /* wait for more data.
+                 * we should be getting data every 50-60ms. wait for max 100ms before we give up and do some background work.
+                 * this is fairly aggressive as all our network I/O runs out of the background work!
+                 */
+
+                struct timespec ts;
+                clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_nsec += 100000000;
+                normalize_timespec(&ts);
+
+                pthread_mutex_unlock(&Modes.decodeThreadMutex);
+
+                pthread_cond_timedwait(&Modes.data_cond, &Modes.data_mutex, &ts); // This unlocks Modes.data_mutex, and waits for Modes.data_cond
+
+                pthread_mutex_lock(&Modes.decodeThreadMutex);
+            }
+
+            // Modes.data_mutex is locked, and possibly we have data.
+
+            // copy out reader CPU time and reset it
+            add_timespecs(&Modes.reader_cpu_accumulator, &Modes.stats_current.reader_cpu, &Modes.stats_current.reader_cpu);
+            Modes.reader_cpu_accumulator.tv_sec = 0;
+            Modes.reader_cpu_accumulator.tv_nsec = 0;
+
+            if (Modes.first_free_buffer != Modes.first_filled_buffer) {
+                // FIFO is not empty, process one buffer.
+
+                struct mag_buf *buf;
+
+                start_cpu_timing(&start_time);
+                buf = &Modes.mag_buffers[Modes.first_filled_buffer];
+
+                // Process data after releasing the lock, so that the capturing
+                // thread can read data while we perform computationally expensive
+                // stuff at the same time.
+                pthread_mutex_unlock(&Modes.data_mutex);
+
+                demodulate2400(buf);
+                if (Modes.mode_ac) {
+                    demodulate2400AC(buf);
+                }
+
+                Modes.stats_current.samples_processed += buf->length;
+                Modes.stats_current.samples_dropped += buf->dropped;
+                end_cpu_timing(&start_time, &Modes.stats_current.demod_cpu);
+
+                // Mark the buffer we just processed as completed.
+                pthread_mutex_lock(&Modes.data_mutex);
+                Modes.first_filled_buffer = (Modes.first_filled_buffer + 1) % MODES_MAG_BUFFERS;
+                pthread_cond_signal(&Modes.data_cond);
+                pthread_mutex_unlock(&Modes.data_mutex);
+                watchdogCounter = 10;
+            } else {
+                // Nothing to process this time around.
+                pthread_mutex_unlock(&Modes.data_mutex);
+                if (--watchdogCounter <= 0) {
+                    log_with_timestamp("No data received from the SDR for a long time, it may have wedged");
+                    watchdogCounter = 600;
+                }
+            }
+
+            start_cpu_timing(&start_time);
+            backgroundTasks();
+            end_cpu_timing(&start_time, &Modes.stats_current.background_cpu);
+            pthread_mutex_lock(&Modes.data_mutex);
+        }
+
+        pthread_mutex_unlock(&Modes.data_mutex);
+
+        log_with_timestamp("Waiting for receive thread termination");
+        pthread_join(Modes.reader_thread, NULL); // Wait on reader thread exit
+        pthread_cond_destroy(&Modes.data_cond); // Thread cleanup - only after the reader thread is dead!
+        pthread_mutex_destroy(&Modes.data_mutex);
+        pthread_mutex_destroy(&Modes.decodeThreadMutex);
+        pthread_mutex_destroy(&Modes.jsonThreadMutex);
+        pthread_mutex_destroy(&Modes.jsonTraceThreadMutex);
+    }
+
+    pthread_mutex_unlock(&Modes.decodeThreadMutex);
 
 #ifndef _WIN32
     pthread_exit(NULL);
@@ -372,12 +617,10 @@ static void display_total_stats(void) {
 static void backgroundTasks(void) {
     static uint64_t next_stats_display;
     static uint64_t next_stats_update;
-    static uint64_t next_json, next_history, next_globe_json;
 
-    uint64_t now = mstime();
+    uint64_t now;
 
     icaoFilterExpire();
-    trackPeriodicUpdate();
 
     if (Modes.net) {
         modesNetPeriodicWork();
@@ -389,8 +632,9 @@ static void backgroundTasks(void) {
         interactiveShowData();
     }
 
+    now = mstime();
     // always update end time so it is current when requests arrive
-    Modes.stats_current.end = mstime();
+    Modes.stats_current.end = now;
 
     if (now >= next_stats_update) {
         int i;
@@ -439,52 +683,6 @@ static void backgroundTasks(void) {
     }
 
 
-    if (Modes.json_dir && now >= next_json && !Modes.json_globe_index) {
-        writeJsonToFile("aircraft.json", generateAircraftJson(-1));
-        next_json = now + Modes.json_interval;
-    }
-
-    if (Modes.json_dir && Modes.json_globe_index && now >= next_globe_json) {
-        static uint32_t part;
-        uint32_t n_parts = 16;
-        char filename[32];
-
-        next_globe_json = now + Modes.json_interval / n_parts;
-
-        for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
-            if (i % n_parts == part) {
-                snprintf(filename, 31, "globe_%04d.json", i);
-                writeJsonToFile(filename, generateAircraftJson(i));
-            }
-        }
-        for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
-            if (i % n_parts == part) {
-                if (globe_index_index(i) >= GLOBE_MIN_INDEX) {
-                    snprintf(filename, 31, "globe_%04d.json", i);
-                    writeJsonToFile(filename, generateAircraftJson(i));
-                }
-            }
-        }
-        //fprintf(stderr, "%u\n", part);
-        if (++part >= n_parts) {
-            part = 0;
-        }
-    }
-
-    if (Modes.json_dir && now >= next_history && !Modes.json_globe_index) {
-        char filebuf[PATH_MAX];
-        snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
-        writeJsonToFile(filebuf, generateAircraftJson(-1));
-
-        if (!Modes.json_aircraft_history_full) {
-            writeJsonToFile("receiver.json", generateReceiverJson()); // number of history entries changed
-            if (Modes.json_aircraft_history_next == HISTORY_SIZE - 1)
-                Modes.json_aircraft_history_full = 1;
-        }
-
-        Modes.json_aircraft_history_next = (Modes.json_aircraft_history_next + 1) % HISTORY_SIZE;
-        next_history = now + HISTORY_INTERVAL;
-    }
 }
 
 //=========================================================================
@@ -522,6 +720,11 @@ static void cleanup_and_exit(int code) {
                 }
                 if (a->trace) {
                     free(a->trace);
+                }
+                if (a->mutex) {
+                    pthread_mutex_unlock(a->mutex);
+                    pthread_mutex_destroy(a->mutex);
+                    free(a->mutex);
                 }
                 free(a);
             }
@@ -879,11 +1082,7 @@ int main(int argc, char **argv) {
     // signal handlers:
     signal(SIGINT, sigintHandler);
     signal(SIGTERM, sigtermHandler);
-
-    /* On a multi-core CPU we run the main thread and reader thread on different cores.
-     * Try sticking the main thread to core 1
-     */
-    thread_to_core(1);
+    signal(SIGUSR1, SIG_IGN);
 
     // Parse the command line options
     if (argp_parse(&argp, argc, argv, 0, 0, 0)) {
@@ -926,122 +1125,33 @@ int main(int argc, char **argv) {
 
     interactiveInit();
 
-    /* If the user specifies --net-only, just run in order to serve network
-     * clients without reading data from the RTL device.
-     * This rules also in case a local Mode-S Beast is connected via USB.
-     */
+    pthread_create(&Modes.decodeThread, NULL, decodeThreadEntryPoint, NULL);
 
-    if (Modes.json_globe_index) {
-        pthread_create(&Modes.json_thread, NULL, jsonThreadEntryPoint, NULL);
+    if (Modes.json_dir) {
+        pthread_create(&Modes.jsonThread, NULL, jsonThreadEntryPoint, NULL);
+
+        if (Modes.json_globe_index) {
+            pthread_create(&Modes.jsonTraceThread, NULL, jsonTraceThreadEntryPoint, NULL);
+        }
     }
 
-    if (Modes.sdr_type == SDR_NONE || Modes.sdr_type == SDR_MODESBEAST || Modes.sdr_type == SDR_GNS) {
-        int64_t background_cpu_millis = 0;
-        int64_t prev_cpu_millis = 0;
-        struct timespec slp = {0, 20 * 1000 * 1000};
-        while (!Modes.exit) {
-            int64_t sleep_millis = 50;
-            struct timespec start_time;
 
-            prev_cpu_millis = background_cpu_millis;
+    while (!Modes.exit) {
+        struct timespec slp = {1, 0};
 
-            start_cpu_timing(&start_time);
-            backgroundTasks();
-            end_cpu_timing(&start_time, &Modes.stats_current.background_cpu);
+        nanosleep(&slp, NULL);
 
-            background_cpu_millis = (int64_t) Modes.stats_current.background_cpu.tv_sec * 1000UL +
-                Modes.stats_current.background_cpu.tv_nsec / 1000000UL;
-            sleep_millis = sleep_millis - (background_cpu_millis - prev_cpu_millis);
-            sleep_millis = (sleep_millis <= 20) ? 20 : sleep_millis;
-
-            //fprintf(stderr, "%ld\n", sleep_millis);
-
-            slp.tv_nsec = sleep_millis * 1000 * 1000;
-            nanosleep(&slp, NULL);
-        }
-    } else {
-        int watchdogCounter = 10; // about 1 second
-
-        // Create the thread that will read the data from the device.
-        pthread_mutex_lock(&Modes.data_mutex);
-        pthread_create(&Modes.reader_thread, NULL, readerThreadEntryPoint, NULL);
-
-        while (!Modes.exit) {
-            struct timespec start_time;
-
-            if (Modes.first_free_buffer == Modes.first_filled_buffer) {
-                /* wait for more data.
-                 * we should be getting data every 50-60ms. wait for max 100ms before we give up and do some background work.
-                 * this is fairly aggressive as all our network I/O runs out of the background work!
-                 */
-
-                struct timespec ts;
-                clock_gettime(CLOCK_REALTIME, &ts);
-                ts.tv_nsec += 100000000;
-                normalize_timespec(&ts);
-                pthread_cond_timedwait(&Modes.data_cond, &Modes.data_mutex, &ts); // This unlocks Modes.data_mutex, and waits for Modes.data_cond
-            }
-
-            // Modes.data_mutex is locked, and possibly we have data.
-
-            // copy out reader CPU time and reset it
-            add_timespecs(&Modes.reader_cpu_accumulator, &Modes.stats_current.reader_cpu, &Modes.stats_current.reader_cpu);
-            Modes.reader_cpu_accumulator.tv_sec = 0;
-            Modes.reader_cpu_accumulator.tv_nsec = 0;
-
-            if (Modes.first_free_buffer != Modes.first_filled_buffer) {
-                // FIFO is not empty, process one buffer.
-
-                struct mag_buf *buf;
-
-                start_cpu_timing(&start_time);
-                buf = &Modes.mag_buffers[Modes.first_filled_buffer];
-
-                // Process data after releasing the lock, so that the capturing
-                // thread can read data while we perform computationally expensive
-                // stuff at the same time.
-                pthread_mutex_unlock(&Modes.data_mutex);
-
-                demodulate2400(buf);
-                if (Modes.mode_ac) {
-                    demodulate2400AC(buf);
-                }
-
-                Modes.stats_current.samples_processed += buf->length;
-                Modes.stats_current.samples_dropped += buf->dropped;
-                end_cpu_timing(&start_time, &Modes.stats_current.demod_cpu);
-
-                // Mark the buffer we just processed as completed.
-                pthread_mutex_lock(&Modes.data_mutex);
-                Modes.first_filled_buffer = (Modes.first_filled_buffer + 1) % MODES_MAG_BUFFERS;
-                pthread_cond_signal(&Modes.data_cond);
-                pthread_mutex_unlock(&Modes.data_mutex);
-                watchdogCounter = 10;
-            } else {
-                // Nothing to process this time around.
-                pthread_mutex_unlock(&Modes.data_mutex);
-                if (--watchdogCounter <= 0) {
-                    log_with_timestamp("No data received from the SDR for a long time, it may have wedged");
-                    watchdogCounter = 600;
-                }
-            }
-
-            start_cpu_timing(&start_time);
-            backgroundTasks();
-            end_cpu_timing(&start_time, &Modes.stats_current.background_cpu);
-            pthread_mutex_lock(&Modes.data_mutex);
-        }
-
-        pthread_mutex_unlock(&Modes.data_mutex);
-
-        log_with_timestamp("Waiting for receive thread termination");
-        pthread_join(Modes.reader_thread, NULL); // Wait on reader thread exit
-        pthread_cond_destroy(&Modes.data_cond); // Thread cleanup - only after the reader thread is dead!
-        pthread_mutex_destroy(&Modes.data_mutex);
+        trackPeriodicUpdate();
     }
 
-    if (Modes.json_globe_index) {
-        pthread_join(Modes.json_thread, NULL); // Wait on json writer thread exit
+    pthread_join(Modes.decodeThread, NULL); // Wait on json writer thread exit
+
+    if (Modes.json_dir) {
+        pthread_join(Modes.jsonThread, NULL); // Wait on json writer thread exit
+
+        if (Modes.json_globe_index) {
+            pthread_join(Modes.jsonTraceThread, NULL); // Wait on json writer thread exit
+        }
     }
 
     // If --stats were given, print statistics

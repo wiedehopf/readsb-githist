@@ -320,7 +320,12 @@ struct
   pthread_cond_t data_cond; // Conditional variable associated
   pthread_t reader_thread;
   pthread_mutex_t data_mutex; // Mutex to synchronize buffer access
-  pthread_t json_thread; // thread writing json
+  pthread_t decodeThread; // thread writing json
+  pthread_t jsonThread; // thread writing json
+  pthread_t jsonTraceThread; // thread writing icao trace jsons
+  pthread_mutex_t decodeThreadMutex;
+  pthread_mutex_t jsonThreadMutex;
+  pthread_mutex_t jsonTraceThreadMutex;
   unsigned first_free_buffer; // Entry in mag_buffers that will next be filled with input.
   unsigned first_filled_buffer; // Entry in mag_buffers that has valid data and will be demodulated next. If equal to next_free_buffer, there is no unprocessed data.
   unsigned trailing_samples; // extra trailing samples in magnitude buffers
@@ -340,7 +345,7 @@ struct
   int beast_fd; // Local Modes-S Beast handler
   struct net_service *services; // Active services
   struct client *clients; // Our clients
-  struct aircraft *aircrafts[AIRCRAFTS_BUCKETS];
+  struct aircraft * volatile aircrafts[AIRCRAFTS_BUCKETS]; // pointers are volatile
   struct net_writer raw_out; // Raw output
   struct net_writer beast_out; // Beast-format output
   struct net_writer beast_reduce_out; // Reduced data Beast-format output
