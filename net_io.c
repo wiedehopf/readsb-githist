@@ -2014,7 +2014,7 @@ struct char_buffer generateTraceJson(struct aircraft *a) {
 
         p = safe_snprintf(p, end, ",\n\"trace\":[ ");
 
-        for (uint32_t i = 0; i < a->trace_len; i++) {
+        for (int i = 0; i < a->trace_len; i++) {
             struct state *trace = &a->trace[i];
             if (trace->altitude != -(2<<13)) {
                 // in the air

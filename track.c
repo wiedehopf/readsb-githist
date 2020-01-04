@@ -1616,10 +1616,23 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         }
 
         struct state *trace = a->trace;
-        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + 24 * 3600 * 1000) {
+        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + 24 * (3600 + 900) * 1000) {
+            int new_start = GLOBE_TRACE_SIZE / 20 + 1;
+
+            if (a->trace_len < GLOBE_TRACE_SIZE) {
+                for (int i = 0; i < a->trace_len; i++) {
+                    struct state *state = &a->trace[i];
+                    if (now < state->timestamp + 24 * 3600 * 1000) {
+                        new_start = i;
+                        break;
+                    }
+                }
+            }
+
             pthread_mutex_lock(a->trace_mutex);
-            a->trace_len = (a->trace_len > 100) ? (a->trace_len - 100) : 0;
-            memmove(trace, trace + 100, a->trace_len * sizeof(struct state));
+            a->trace_len -= new_start;
+            a->trace_len = (a->trace_len >= 0) ? a->trace_len : 0;
+            memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
             pthread_mutex_unlock(a->trace_mutex);
         }
 
@@ -1664,15 +1677,15 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             goto save_state;
         }
 
-        if (a->altitude_baro < 10000 && abs((a->altitude_baro + 250)/500 - (last->altitude + 250)/500) >= 1) {
+        if (a->altitude_baro < 20000 && abs((a->altitude_baro + 100)/200 - (last->altitude + 100)/200) >= 1) {
             goto save_state;
         }
 
-        if (abs((a->altitude_baro + 500)/1000 - (last->altitude + 500)/1000) >= 1) {
+        if (abs((a->altitude_baro + 250)/500 - (last->altitude + 250)/500) >= 1) {
             goto save_state;
         }
 
-        if (abs(a->altitude_baro - last->altitude) > 50 && now > last->timestamp + ((1000 * 10000)  / (uint64_t) abs(a->altitude_baro - last->altitude))) {
+        if (abs(a->altitude_baro - last->altitude) > 50 && now > last->timestamp + ((1000 * 1000)  / (uint64_t) abs(a->altitude_baro - last->altitude))) {
             goto save_state;
         }
 

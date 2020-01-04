@@ -6,12 +6,12 @@ void init_globe_index(struct tile *s_tiles) {
     // Arctic
     s_tiles[count++] = (struct tile) {
         60, -130,
-        90, 140
+        90, 150
     };
 
     // North Pacific
     s_tiles[count++] = (struct tile) {
-        10, 140,
+        10, 150,
         90, -130
     };
 
@@ -21,17 +21,36 @@ void init_globe_index(struct tile *s_tiles) {
         60, -70
     };
 
-    // Russia
+    // Northwest USA
     s_tiles[count++] = (struct tile) {
-        40, 40,
-        60, 140
+        40, -130,
+        50, -100
     };
 
-    // North China
+    // West Russia
     s_tiles[count++] = (struct tile) {
-        30, 70,
-        40, 120
+        40, 20,
+        60, 50
     };
+
+    // Central Russia
+    s_tiles[count++] = (struct tile) {
+        30, 50,
+        60, 90
+    };
+
+    // East Russia
+    s_tiles[count++] = (struct tile) {
+        30, 90,
+        60, 150
+    };
+
+    // Persian Gulf / Arabian Sea
+    s_tiles[count++] = (struct tile) {
+        10, 50,
+        30, 70
+    };
+
     // India
     s_tiles[count++] = (struct tile) {
         10, 70,
@@ -40,7 +59,7 @@ void init_globe_index(struct tile *s_tiles) {
     // South China and ICAO special use
     s_tiles[count++] = (struct tile) {
         10, 90,
-        30, 140
+        30, 150
     };
 
 
@@ -64,12 +83,6 @@ void init_globe_index(struct tile *s_tiles) {
 
     // North South America
     s_tiles[count++] = (struct tile) {
-        20, -130,
-        30, -100
-    };
-
-    // North South America
-    s_tiles[count++] = (struct tile) {
         -10, -90,
         10, -40
     };
@@ -80,11 +93,19 @@ void init_globe_index(struct tile *s_tiles) {
         -10, -40
     };
 
-    // Guatemala
+    // Guatemala / Mexico
     s_tiles[count++] = (struct tile) {
         10, -130,
-        20, -70
+        30, -90
     };
+
+    // Florida / Cuba
+    s_tiles[count++] = (struct tile) {
+        10, -90,
+        30, -70
+    };
+
+
 
     // North Africa
     s_tiles[count++] = (struct tile) {
@@ -92,10 +113,10 @@ void init_globe_index(struct tile *s_tiles) {
         40, 30
     };
 
-    // North Africa
+    // Middle East
     s_tiles[count++] = (struct tile) {
         10, 30,
-        40, 70
+        40, 50
     };
 
     // North Atlantic

@@ -115,8 +115,8 @@ struct aircraft
   double signalLevel[8]; // Last 8 Signal Amplitudes
   long messages; // Number of Mode S messages received
   struct state *trace; // array of positions representing the aircrafts trace/trail
-  uint32_t trace_len; // current number of points in the trace
-  uint32_t trace_len_last_write; // number of points in the trace at time of last write
+  int32_t trace_len; // current number of points in the trace
+  int32_t trace_len_last_write; // number of points in the trace at time of last write
   double trace_llat; // last saved lat
   double trace_llon; // last saved lon
   pthread_mutex_t *mutex;
