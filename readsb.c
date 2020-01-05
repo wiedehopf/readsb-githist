@@ -317,47 +317,37 @@ static void *jsonThreadEntryPoint(void *arg) {
 
     pthread_mutex_lock(&Modes.jsonThreadMutex);
 
-    if (!Modes.json_globe_index) {
-        uint64_t next_history = mstime();
+    uint64_t next_history = mstime();
 
-        while (!Modes.exit) {
+    while (!Modes.exit) {
 
-            pthread_mutex_unlock(&Modes.jsonThreadMutex);
+        pthread_mutex_unlock(&Modes.jsonThreadMutex);
 
-            nanosleep(&slp, NULL);
+        nanosleep(&slp, NULL);
 
-            pthread_mutex_lock(&Modes.jsonThreadMutex);
+        pthread_mutex_lock(&Modes.jsonThreadMutex);
 
-            uint64_t now = mstime();
+        uint64_t now = mstime();
+        writeJsonToFile("aircraft.json", generateAircraftJson(-1));
 
-            writeJsonToFile("aircraft.json", generateAircraftJson(-1));
+        if (!Modes.json_globe_index && now >= next_history) {
+            char filebuf[PATH_MAX];
 
-            if (now >= next_history) {
-                char filebuf[PATH_MAX];
+            snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
+            writeJsonToFile(filebuf, generateAircraftJson(-1));
 
-                snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
-                writeJsonToFile(filebuf, generateAircraftJson(-1));
-
-                if (!Modes.json_aircraft_history_full) {
-                    writeJsonToFile("receiver.json", generateReceiverJson()); // number of history entries changed
-                    if (Modes.json_aircraft_history_next == HISTORY_SIZE - 1)
-                        Modes.json_aircraft_history_full = 1;
-                }
-
-                Modes.json_aircraft_history_next = (Modes.json_aircraft_history_next + 1) % HISTORY_SIZE;
-                next_history = now + HISTORY_INTERVAL;
+            if (!Modes.json_aircraft_history_full) {
+                writeJsonToFile("receiver.json", generateReceiverJson()); // number of history entries changed
+                if (Modes.json_aircraft_history_next == HISTORY_SIZE - 1)
+                    Modes.json_aircraft_history_full = 1;
             }
+
+            Modes.json_aircraft_history_next = (Modes.json_aircraft_history_next + 1) % HISTORY_SIZE;
+            next_history = now + HISTORY_INTERVAL;
         }
-    } else {
 
-        while (!Modes.exit) {
+        if (Modes.json_globe_index) {
             char filename[32];
-
-            pthread_mutex_unlock(&Modes.jsonThreadMutex);
-
-            nanosleep(&slp, NULL);
-
-            pthread_mutex_lock(&Modes.jsonThreadMutex);
 
             for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
                 snprintf(filename, 31, "globe_%04d.json", i);
@@ -394,12 +384,20 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
     slp.tv_sec =  (sleep / 1000);
     slp.tv_nsec = (sleep % 1000) * 1000 * 1000;
 
-
-
     pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
 
+    {
+        char pathbuf[PATH_MAX];
+        snprintf(pathbuf, PATH_MAX, "%s/traces", Modes.json_dir);
+        mkdir(pathbuf, 0755);
+        for (int i = 0; i < 256; i++) {
+            snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", Modes.json_dir, i);
+            mkdir(pathbuf, 0755);
+        }
+    }
+
     while (!Modes.exit) {
-        char filename[32];
+        char filename[256];
         struct aircraft *a;
 
         pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
@@ -418,7 +416,7 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                 pthread_mutex_lock(a->trace_mutex);
 
                 a->trace_len_last_write = a->trace_len;
-                snprintf(filename, 31, "icao_%s%06x.json", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                snprintf(filename, 256, "traces/%02x/trace_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
                 writeJsonToFile(filename, generateTraceJson(a));
 
                 pthread_mutex_unlock(a->trace_mutex);
