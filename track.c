@@ -1349,7 +1349,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         updatePosition(a, mm);
     }
 
-    if (mm->sbs_in && mm->decoded_lat != 0 && mm->decoded_lon != 0) {
+    if (mm->sbs_in && mm->sbs_pos_valid) {
         if (accept_data(&a->position_valid, mm->source, mm, 0)) {
             a->lat = mm->decoded_lat;
             a->lon = mm->decoded_lon;

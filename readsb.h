@@ -132,6 +132,7 @@ typedef enum
 {
   SOURCE_INVALID, /* data is not valid */
   SOURCE_MODE_AC, /* A/C message */
+  SOURCE_SBS, /* data is of unknown quality */
   SOURCE_MLAT, /* derived from mlat */
   SOURCE_MODE_S, /* data from a Mode S message, no full CRC */
   SOURCE_MODE_S_CHECKED, /* data from a Mode S message with full CRC */
@@ -500,7 +501,8 @@ struct modesMessage
   unsigned alert_valid : 1;
   unsigned alert : 1;
   unsigned emergency_valid : 1;
-  unsigned padding : 13;
+  unsigned sbs_pos_valid : 1;
+  unsigned padding : 12;
 
   // valid if altitude_baro_valid:
   int altitude_baro; // Altitude in either feet or meters
