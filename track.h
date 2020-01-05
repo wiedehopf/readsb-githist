@@ -58,8 +58,8 @@
 #define TRACK_AIRCRAFT_TTL (18*60*60000)
 // 18 hours should cover most few turn-arounds.
 
-#define TRACK_AIRCRAFT_NON_ICAO_TTL (1*60*60000)
-// 1 hour for NON_ICAO aircraft
+#define TRACK_AIRCRAFT_NON_ICAO_TTL (5*60000)
+// 5 minutes for NON_ICAO aircraft
 
 /* Maximum age of a tracked aircraft with only 1 message received, in milliseconds */
 #define TRACK_AIRCRAFT_ONEHIT_TTL 60000

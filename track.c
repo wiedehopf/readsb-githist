@@ -116,6 +116,7 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
             fprintf(stderr, "Unable to initialize trace mutex!\n");
             exit(1);
         }
+        a->globe_index = -5;
     }
 
     // initialize data validity ages
@@ -1587,8 +1588,8 @@ static void cleanupAircraft(struct aircraft *a) {
         a = iter;
         iter = iter->next;
         if (a->trace_mutex) {
-            char filename[32];
-            snprintf(filename, 31, "icao_%s%06x.json", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            char filename[256];
+            snprintf(filename, 256, "traces/%02x/trace_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
             unlink(filename);
             pthread_mutex_unlock(a->trace_mutex);
             pthread_mutex_destroy(a->trace_mutex);

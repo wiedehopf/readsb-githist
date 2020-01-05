@@ -99,10 +99,10 @@ void init_globe_index(struct tile *s_tiles) {
         30, -90
     };
 
-    // Florida / Cuba
+    // Cuba / Haiti / Honduras
     s_tiles[count++] = (struct tile) {
         10, -90,
-        30, -70
+        20, -70
     };
 
 
