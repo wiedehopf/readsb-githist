@@ -1463,6 +1463,7 @@ static void trackMatchAC(uint64_t now) {
 //
 
 static void trackRemoveStaleAircraft(struct aircraft **freeList) {
+    int with_pos = 0;
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         struct aircraft *a = Modes.aircrafts[j];
         struct aircraft *prev = NULL;
@@ -1531,6 +1532,9 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 EXPIRE(sda);
 #undef EXPIRE
 
+                if (trackDataValid(&a->position_valid))
+                    with_pos++;
+
                 // reset position reliability when the position has expired
                 if (a->position_valid.source == SOURCE_INVALID) {
                     a->pos_reliable_odd = 0;
@@ -1545,6 +1549,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
             }
         }
     }
+    Modes.json_globe_ac_count = with_pos;
 }
 
 

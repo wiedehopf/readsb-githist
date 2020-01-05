@@ -1893,6 +1893,12 @@ struct char_buffer generateAircraftJson(int globe_index){
             Modes.stats_current.messages_total + Modes.stats_alltime.messages_total);
 
     if (globe_index >= 0) {
+
+        p = safe_snprintf(p, end,
+                "  \"global_ac_count_withpos\" : %d,\n",
+                Modes.json_globe_ac_count
+                );
+
         p = safe_snprintf(p, end, "  \"globeIndex\" : %d, ", globe_index);
         if (globe_index >= GLOBE_MIN_INDEX) {
             int grid = GLOBE_INDEX_GRID;

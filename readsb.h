@@ -395,7 +395,8 @@ struct
   char *filename; // Input form file, --ifile option
   char *net_bind_address; // Bind address
   char *json_dir; // Path to json base directory, or NULL not to write json.
-  int json_globe_index; // Enable extra globe indexed json files.
+  volatile int json_globe_index; // Enable extra globe indexed json files.
+  int json_globe_ac_count;
   struct tile *json_globe_special_tiles;
   char *beast_serial; // Modes-S Beast device path
 #if defined(__arm__)
