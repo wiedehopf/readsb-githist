@@ -121,15 +121,15 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
 
     // initialize data validity ages
 #define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
-    F(callsign, 60, 70); // ADS-B or Comm-B
-    F(altitude_baro, 15, 70); // ADS-B or Mode S
+    F(callsign, 60, 700); // ADS-B or Comm-B
+    F(altitude_baro, 15, 700); // ADS-B or Mode S
     F(altitude_geom, 60, 70); // ADS-B only
     F(geom_delta, 60, 70); // ADS-B only
-    F(gs, 60, 70); // ADS-B or Comm-B
+    F(gs, 60, 700); // ADS-B or Comm-B
     F(ias, 60, 70); // ADS-B (rare) or Comm-B
     F(tas, 60, 70); // ADS-B (rare) or Comm-B
     F(mach, 60, 70); // Comm-B only
-    F(track, 60, 70); // ADS-B or Comm-B
+    F(track, 60, 700); // ADS-B or Comm-B
     F(track_rate, 60, 70); // Comm-B only
     F(roll, 60, 70); // Comm-B only
     F(mag_heading, 60, 70); // ADS-B (rare) or Comm-B
@@ -146,7 +146,7 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     F(nav_modes, 60, 70); // ADS-B or Comm-B
     F(cpr_odd, 60, 70); // ADS-B only
     F(cpr_even, 60, 70); // ADS-B only
-    F(position, 60, 70); // ADS-B only
+    F(position, 60, 700); // ADS-B only
     F(nic_a, 60, 70); // ADS-B only
     F(nic_c, 60, 70); // ADS-B only
     F(nic_baro, 60, 70); // ADS-B only

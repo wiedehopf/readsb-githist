@@ -83,7 +83,15 @@ static int decodeHexMessage(struct client *c, char *hex, int remote);
 static int decodeSbsLine(struct client *c, char *line, int remote);
 static int decodeSbsLineMlat(struct client *c, char *line, int remote) {
     MODES_NOTUSED(remote);
-    return decodeSbsLine(c, line, 23);
+    return decodeSbsLine(c, line, 64 + SOURCE_MLAT);
+}
+static int decodeSbsLinePrio(struct client *c, char *line, int remote) {
+    MODES_NOTUSED(remote);
+    return decodeSbsLine(c, line, 64 + SOURCE_PRIO);
+}
+static int decodeSbsLineJaero(struct client *c, char *line, int remote) {
+    MODES_NOTUSED(remote);
+    return decodeSbsLine(c, line, 64 + SOURCE_JAERO);
 }
 
 static void send_raw_heartbeat(struct net_service *service);
@@ -455,6 +463,8 @@ void modesInitNet(void) {
     struct net_service *sbs_out;
     struct net_service *sbs_in;
     struct net_service *sbs_in_mlat;
+    struct net_service *sbs_in_jaero;
+    struct net_service *sbs_in_prio;
 
     uint64_t now = mstime();
 
@@ -483,6 +493,22 @@ void modesInitNet(void) {
     serviceListen(sbs_in, Modes.net_bind_address, Modes.net_input_sbs_ports);
 
     sbs_in_mlat = serviceInit("Basestation TCP input MLAT", NULL, NULL, READ_MODE_ASCII, "\n",  decodeSbsLineMlat);
+    sbs_in_prio = serviceInit("Basestation TCP input PRIO", NULL, NULL, READ_MODE_ASCII, "\n",  decodeSbsLinePrio);
+    sbs_in_jaero = serviceInit("Basestation TCP input JAERO", NULL, NULL, READ_MODE_ASCII, "\n",  decodeSbsLineJaero);
+
+    if (strlen(Modes.net_input_sbs_ports) == 5) {
+        char *mlat = strdup(Modes.net_input_sbs_ports);
+        mlat[4] = '7';
+        serviceListen(sbs_in_mlat, Modes.net_bind_address, mlat);
+
+        char *prio = strdup(Modes.net_input_sbs_ports);
+        prio[4] = '8';
+        serviceListen(sbs_in_prio, Modes.net_bind_address, prio);
+
+        char *jaero = strdup(Modes.net_input_sbs_ports);
+        jaero[4] = '9';
+        serviceListen(sbs_in_jaero, Modes.net_bind_address, jaero);
+    }
 
     raw_in = serviceInit("Raw TCP input", NULL, NULL, READ_MODE_ASCII, "\n", decodeHexMessage);
     serviceListen(raw_in, Modes.net_bind_address, Modes.net_input_raw_ports);
@@ -522,6 +548,10 @@ void modesInitNet(void) {
             con->service = sbs_in;
         else if (strcmp(con->protocol, "sbs_in_mlat") == 0)
             con->service = sbs_in_mlat;
+        else if (strcmp(con->protocol, "sbs_in_jaero") == 0)
+            con->service = sbs_in_jaero;
+        else if (strcmp(con->protocol, "sbs_in_prio") == 0)
+            con->service = sbs_in_prio;
 
         con->mutex = malloc(sizeof(pthread_mutex_t));
         if (!con->mutex || pthread_mutex_init(con->mutex, NULL)) {
@@ -908,8 +938,8 @@ static int decodeSbsLine(struct client *c, char *line, int remote) {
 
     MODES_NOTUSED(c);
     mm = zeroMessage;
-    if (remote == 23)
-        mm.source = SOURCE_MLAT;
+    if (remote >= 64)
+        mm.source = remote - 64;
     else
         mm.source = SOURCE_SBS;
 
@@ -1935,11 +1965,18 @@ struct char_buffer generateAircraftJson(int globe_index){
             if (a->messages < 2) { // basic filter for bad decodes
                 continue;
             }
-            if ((now - a->seen) > 90E3) // don't include stale aircraft in the JSON
-                continue;
 
-            if (globe_index >= 0 && a->globe_index != globe_index)
-                continue;
+            if (globe_index >= 0) {
+                if (a->globe_index != globe_index)
+                    continue;
+                if (a->position_valid.source != SOURCE_JAERO && (now - a->seen_pos > 70 * 1000))
+                    continue;
+                if (a->position_valid.source == SOURCE_JAERO && (now - a->seen_pos > 700 * 1000))
+                    continue;
+            } else {
+                if ((now - a->seen) > 70 * 1000) // don't include stale aircraft in the JSON
+                    continue;
+            }
 
             pthread_mutex_lock(a->mutex);
 
@@ -2026,6 +2063,9 @@ retry:
                 p = safe_snprintf(p, end, ",\"alert\":%u", a->alert);
             if (trackDataValid(&a->spi_valid))
                 p = safe_snprintf(p, end, ",\"spi\":%u", a->spi);
+
+            if (a->position_valid.source == SOURCE_JAERO)
+                p = safe_snprintf(p, end, ",\"jaero\": true");
 
             p = safe_snprintf(p, end, ",\"mlat\":");
             p = append_flags(p, end, a, SOURCE_MLAT);

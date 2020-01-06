@@ -986,6 +986,8 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                     && strcmp(con->protocol, "vrs_out") != 0
                     && strcmp(con->protocol, "sbs_in") != 0
                     && strcmp(con->protocol, "sbs_in_mlat") != 0
+                    && strcmp(con->protocol, "sbs_in_jaero") != 0
+                    && strcmp(con->protocol, "sbs_in_prio") != 0
                     && strcmp(con->protocol, "sbs_out") != 0) {
                 fprintf(stderr, "--net-connector: Unknown protocol: %s\n", con->protocol);
                 fprintf(stderr, "Supported protocols: beast_out, beast_in, beast_reduce_out, raw_out, raw_in, sbs_out, sbs_in, vrs_out\n");
