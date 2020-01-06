@@ -613,7 +613,6 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
                     a->pos_reliable_odd = min(a->pos_reliable_odd + 1, Modes.filter_persistence);
                 } else {
                     a->pos_reliable_even = min(a->pos_reliable_even + 1, Modes.filter_persistence);
-                    a->pos_set = 1;
                 }
 
                 if (trackDataValid(&a->gs_valid))
@@ -1613,6 +1612,8 @@ static void cleanupAircraft(struct aircraft *a) {
 }
 
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now) {
+
+    a->pos_set = 1;
 
     if (Modes.json_globe_index) {
         static uint32_t count;
