@@ -121,15 +121,15 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
 
     // initialize data validity ages
 #define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
-    F(callsign, 60, 700); // ADS-B or Comm-B
-    F(altitude_baro, 15, 700); // ADS-B or Mode S
+    F(callsign, 60, 900); // ADS-B or Comm-B
+    F(altitude_baro, 15, 900); // ADS-B or Mode S
     F(altitude_geom, 60, 70); // ADS-B only
     F(geom_delta, 60, 70); // ADS-B only
-    F(gs, 60, 700); // ADS-B or Comm-B
+    F(gs, 60, 900); // ADS-B or Comm-B
     F(ias, 60, 70); // ADS-B (rare) or Comm-B
     F(tas, 60, 70); // ADS-B (rare) or Comm-B
     F(mach, 60, 70); // Comm-B only
-    F(track, 60, 700); // ADS-B or Comm-B
+    F(track, 60, 900); // ADS-B or Comm-B
     F(track_rate, 60, 70); // Comm-B only
     F(roll, 60, 70); // Comm-B only
     F(mag_heading, 60, 70); // ADS-B (rare) or Comm-B
@@ -146,7 +146,7 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     F(nav_modes, 60, 70); // ADS-B or Comm-B
     F(cpr_odd, 60, 70); // ADS-B only
     F(cpr_even, 60, 70); // ADS-B only
-    F(position, 60, 700); // ADS-B only
+    F(position, 60, 900); // ADS-B only
     F(nic_a, 60, 70); // ADS-B only
     F(nic_c, 60, 70); // ADS-B only
     F(nic_baro, 60, 70); // ADS-B only
@@ -269,6 +269,21 @@ static double greatcircle(double lat0, double lon0, double lat1, double lon1) {
 
     // spherical law of cosines
     return 6371e3 * acos(sin(lat0) * sin(lat1) + cos(lat0) * cos(lat1) * cos(dlon));
+}
+
+static float bearing(double lat0, double lon0, double lat1, double lon1) {
+    lat0 = lat0 * M_PI / 180.0;
+    lon0 = lon0 * M_PI / 180.0;
+    lat1 = lat1 * M_PI / 180.0;
+    lon1 = lon1 * M_PI / 180.0;
+
+    double y = sin(lon1-lon0)*cos(lat1);
+    double x = cos(lat0)*sin(lat1) - sin(lat0)*cos(lat1)*cos(lon1-lon0);
+    double res = (atan2(y, x) * 180 / M_PI + 360);
+    while (res > 360)
+        res -= 360;
+    fprintf(stderr, "y %.12f, x %.12f, %.5f\n", y, x, res);
+    return (float) res;
 }
 
 static void update_range_histogram(double lat, double lon) {
@@ -656,15 +671,15 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
         mm->decoded_nic = new_nic;
         mm->decoded_rc = new_rc;
 
+        if (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2) {
+            globe_stuff(a, new_lat, new_lon, mm->sysTimestampMsg);
+        }
+
         // Update aircraft state
         a->lat = new_lat;
         a->lon = new_lon;
         a->pos_nic = new_nic;
         a->pos_rc = new_rc;
-
-        if (a->pos_reliable_odd >= 2 || a->pos_reliable_even >= 2) {
-            globe_stuff(a, new_lat, new_lon, mm->sysTimestampMsg);
-        }
 
         if (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2 && mm->source == SOURCE_ADSB) {
             update_range_histogram(new_lat, new_lon);
@@ -1351,13 +1366,13 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
     if (mm->sbs_in && mm->sbs_pos_valid) {
         if (accept_data(&a->position_valid, mm->source, mm, 0)) {
+            globe_stuff(a, mm->decoded_lat, mm->decoded_lon, mm->sysTimestampMsg);
+
             a->lat = mm->decoded_lat;
             a->lon = mm->decoded_lon;
 
             a->pos_reliable_odd = 2;
             a->pos_reliable_even = 2;
-
-            globe_stuff(a, a->lat, a->lon, mm->sysTimestampMsg);
         }
     }
 
@@ -1613,10 +1628,15 @@ static void cleanupAircraft(struct aircraft *a) {
 
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now) {
 
+    if (!trackDataValid(&a->track_valid) && a->pos_set) {
+        a->calc_track = bearing(a->lat, a->lon, new_lat, new_lon);
+    } else {
+        a->calc_track = 0;
+    }
+
     a->pos_set = 1;
 
     if (Modes.json_globe_index) {
-        static uint32_t count;
 
         a->globe_index = globe_index(new_lat, new_lon);
         if (!a->trace) {
@@ -1626,21 +1646,24 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         struct state *trace = a->trace;
         if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + 24 * (3600 + 900) * 1000) {
-            int new_start = GLOBE_TRACE_SIZE / 20 + 1;
+            int new_start = GLOBE_TRACE_SIZE / 64;
 
             if (a->trace_len < GLOBE_TRACE_SIZE) {
+                int found = 0;
                 for (int i = 0; i < a->trace_len; i++) {
                     struct state *state = &a->trace[i];
                     if (now < state->timestamp + 24 * 3600 * 1000) {
                         new_start = i;
+                        found = 1;
                         break;
                     }
                 }
+                if (!found)
+                    new_start = a->trace_len;
             }
 
             pthread_mutex_lock(a->trace_mutex);
             a->trace_len -= new_start;
-            a->trace_len = (a->trace_len >= 0) ? a->trace_len : 0;
             memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
             pthread_mutex_unlock(a->trace_mutex);
         }
@@ -1658,7 +1681,12 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         if (a->trace_len == 0 )
             goto save_state;
 
+
         struct state *last = &(trace[a->trace_len-1]);
+        float track_diff = fabs(track - last->track / 10.0);
+
+        int32_t last_alt = last->altitude & ((1<<21) - 1);
+        last_alt -= 100000; // restore actual altitude
 
 
         if (now > last->timestamp + 300 * 1000 )
@@ -1673,57 +1701,77 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             goto save_state;
 
         if (on_ground) {
-            if (distance * fabs(track - last->track) > 200)
+            if (distance * track_diff > 200)
                 goto save_state;
 
             if (distance > 400)
                 goto save_state;
         }
 
-        if (fabs(track - last->track) > 0.5
-                && (now > last->timestamp + (uint64_t) (100.0 * 1000.0 / turn_density / fabs(track - last->track)))
+
+        if (a->altitude_baro > 10000 && abs((a->altitude_baro + 250)/500 - (last_alt + 250)/500) >= 1) {
+            goto save_state;
+        }
+
+        {
+            int alt_add = (a->altitude_baro >= 0) ? 125 : -125;
+            int last_alt_add = (last_alt >= 0) ? 125 : -125;
+            if (a->altitude_baro < 10000 && abs((a->altitude_baro + alt_add)/250 - (last_alt + last_alt_add)/250) >= 1) {
+                goto save_state;
+            }
+        }
+
+        if (abs(a->altitude_baro - last_alt) >= 100 && now > last->timestamp + ((1000 * 12000)  / abs(a->altitude_baro - last_alt))) {
+            goto save_state;
+        }
+
+        if (track_diff > 0.5
+                && (now > last->timestamp + (uint64_t) (100.0 * 1000.0 / turn_density / track_diff))
            ) {
-            goto save_state;
-        }
-
-        if (a->altitude_baro < 20000 && abs((a->altitude_baro + 100)/200 - (last->altitude + 100)/200) >= 1) {
-            goto save_state;
-        }
-
-        if (abs((a->altitude_baro + 250)/500 - (last->altitude + 250)/500) >= 1) {
-            goto save_state;
-        }
-
-        if (abs(a->altitude_baro - last->altitude) > 50 && now > last->timestamp + ((1000 * 1000)  / (uint64_t) abs(a->altitude_baro - last->altitude))) {
-            goto save_state;
-        }
-
-
-        if (now > a->seen_pos + 25 * 1000) {
             goto save_state;
         }
 
         goto no_save_state;
 save_state:
+
         a->trace_llat = new_lat;
         a->trace_llon = new_lon;
         new->lat = (int32_t) (new_lat * 1E6);
         new->lon = (int32_t) (new_lon * 1E6);
         new->timestamp = now;
-        new->altitude = on_ground ? -(2<<13) : a->altitude_baro;
-        new->gs = a->gs;
-
-        if (now < a->seen_pos + 15 * 1000) {
-            new->track = track;
-        } else {
-            new->track = track + 1000;
+        new->gs = (int16_t) (10 * a->gs);
+        new->track = (int16_t) (10 * track);
+        new->altitude = a->altitude_baro + 100000;
+        /*
+           int stale = altitude & (1<<21);
+           int on_ground = altitude & (1<<22);
+           int alt_unknown = altitude & (1<<23);
+           int track_unknown = altitude & (1<<24);
+           int gs_unknown = altitude & (1<<25);
+        */
+        if (new->altitude < 0 || new->altitude > 1000000) {
+            new->altitude = 0;
+            new->altitude |= (1<<23);
         }
 
+        if (now > a->seen_pos + 15 * 1000)
+            new->altitude |= (1<<21);
+
+        if (on_ground)
+            new->altitude |= (1<<22);
+
+        if (!trackDataValid(&a->altitude_baro_valid) || a->altitude_baro_reliable < 2)
+            new->altitude |= (1<<23);
+
+        if (!trackDataValid(&a->gs_valid))
+            new->altitude |= (1<<24);
+
+        if (!trackDataValid(&a->track_valid))
+            new->altitude |= (1<<25);
+
         (a->trace_len)++;
-        count++;
-        //fprintf(stderr, "%u\n", a->trace_len);
-        //if (count++ % 1000 == 0)
-        //   fprintf(stderr, "%u\n", a->trace_len);
+        //fprintf(stderr, "Added to trace for %06X (%d).\n", a->addr, a->trace_len);
+
 no_save_state:
         ;
     }
@@ -1731,3 +1779,4 @@ no_save_state:
     a->seen_pos = now;
 
 }
+

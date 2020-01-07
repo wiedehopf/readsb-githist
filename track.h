@@ -98,8 +98,8 @@ struct state
   int32_t lon;
   uint64_t timestamp;
   int32_t altitude;
-  float gs;
-  float track;
+  int16_t gs;
+  int16_t track;
 };
 
 /* Structure used to describe the state of one tracked aircraft */
@@ -153,6 +153,8 @@ struct aircraft
   float roll; // Roll angle, degrees right
   float mag_heading; // Magnetic heading
   float true_heading; // True heading
+
+  float calc_track; // Calculated Ground track
 
   uint64_t next_reduce_forward_DF11;
   data_validity callsign_valid;

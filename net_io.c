@@ -1969,12 +1969,12 @@ struct char_buffer generateAircraftJson(int globe_index){
             if (globe_index >= 0) {
                 if (a->globe_index != globe_index)
                     continue;
-                if (a->position_valid.source != SOURCE_JAERO && (now - a->seen_pos > 70 * 1000))
+                if (a->position_valid.source != SOURCE_JAERO && (now - a->seen_pos > 90 * 1000))
                     continue;
-                if (a->position_valid.source == SOURCE_JAERO && (now - a->seen_pos > 700 * 1000))
+                if (a->position_valid.source == SOURCE_JAERO && (now - a->seen_pos > 900 * 1000))
                     continue;
             } else {
-                if ((now - a->seen) > 70 * 1000) // don't include stale aircraft in the JSON
+                if ((now - a->seen) > 90 * 1000) // don't include stale aircraft in the JSON
                     continue;
             }
 
@@ -2010,6 +2010,8 @@ retry:
                 p = safe_snprintf(p, end, ",\"mach\":%.3f", a->mach);
             if (trackDataValid(&a->track_valid))
                 p = safe_snprintf(p, end, ",\"track\":%.1f", a->track);
+            else if (a->calc_track != 0)
+                p = safe_snprintf(p, end, ",\"calc_track\":%.1f", a->calc_track);
             if (trackDataValid(&a->track_rate_valid))
                 p = safe_snprintf(p, end, ",\"track_rate\":%.2f", a->track_rate);
             if (trackDataValid(&a->roll_valid))
@@ -2111,17 +2113,40 @@ struct char_buffer generateTraceJson(struct aircraft *a) {
 
         for (int i = 0; i < a->trace_len; i++) {
             struct state *trace = &a->trace[i];
-            if (trace->altitude != -(2<<13)) {
+
+            int32_t altitude = trace->altitude;
+            int stale = altitude & (1<<21);
+            int on_ground = altitude & (1<<22);
+            int alt_unknown = altitude & (1<<23);
+            int track_unknown = altitude & (1<<24);
+            int gs_unknown = altitude & (1<<25);
+
+            altitude = altitude & ((1<<21) - 1);
+            altitude -= 100000; // restore actual altitude
+
                 // in the air
-                p = safe_snprintf(p, end, "[%.1f,%f,%f,%d,%.1f,%.1f],",
-                        (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6,
-                        trace->altitude, trace->gs, trace->track);
-            } else {
-                // on the ground
-                p = safe_snprintf(p, end, "[%.1f,%f,%f,%s,%.1f,%.1f],",
-                        (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6,
-                        "\"ground\"" , trace->gs, trace->track);
-            }
+                p = safe_snprintf(p, end, "[%.1f,%f,%f",
+                        (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6);
+
+                if (alt_unknown)
+                    p = safe_snprintf(p, end, ",null");
+                else if (on_ground)
+                    p = safe_snprintf(p, end, ",\"ground\"");
+                else
+                    p = safe_snprintf(p, end, ",%d", altitude);
+
+                if (gs_unknown)
+                    p = safe_snprintf(p, end, ",null");
+                else
+                    p = safe_snprintf(p, end, ",%.1f", trace->gs / 10.0);
+
+                if (track_unknown)
+                    p = safe_snprintf(p, end, ",null");
+                else
+                    p = safe_snprintf(p, end, ",%.1f", trace->track / 10.0);
+
+                p = safe_snprintf(p, end, ",%01d],", stale ? 1 : 0);
+
         }
 
         p--; // remove last comma
