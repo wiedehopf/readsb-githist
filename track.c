@@ -282,7 +282,6 @@ static float bearing(double lat0, double lon0, double lat1, double lon1) {
     double res = (atan2(y, x) * 180 / M_PI + 360);
     while (res > 360)
         res -= 360;
-    fprintf(stderr, "y %.12f, x %.12f, %.5f\n", y, x, res);
     return (float) res;
 }
 
@@ -1693,7 +1692,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             goto save_state;
 
         double distance = greatcircle(a->trace_llat, a->trace_llon, new_lat, new_lon);
-        if (distance < 40 || now < last->timestamp + 4 * 1000 ) {
+        if (distance < 40 || now < last->timestamp + 2000 ) {
             goto no_save_state;
         }
 
@@ -1709,14 +1708,17 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         }
 
 
-        if (a->altitude_baro > 10000 && abs((a->altitude_baro + 250)/500 - (last_alt + 250)/500) >= 1) {
+        if (a->altitude_baro > 8000 && abs((a->altitude_baro + 250)/500 - (last_alt + 250)/500) >= 1) {
             goto save_state;
         }
 
         {
-            int alt_add = (a->altitude_baro >= 0) ? 125 : -125;
-            int last_alt_add = (last_alt >= 0) ? 125 : -125;
-            if (a->altitude_baro < 10000 && abs((a->altitude_baro + alt_add)/250 - (last_alt + last_alt_add)/250) >= 1) {
+            int offset = 62;
+            int div = 125;
+            int alt_add = (a->altitude_baro >= 0) ? offset : (-1 * offset);
+            int last_alt_add = (last_alt >= 0) ? offset : (-1 * offset);
+            if (a->altitude_baro <= 8000
+                    && abs((a->altitude_baro + alt_add)/div - (last_alt + last_alt_add)/div) >= 1) {
                 goto save_state;
             }
         }
