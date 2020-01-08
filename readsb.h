@@ -133,8 +133,8 @@ typedef enum
   SOURCE_INVALID, /* data is not valid */
   SOURCE_INDIRECT, /* data is of unknown quality */
   SOURCE_MODE_AC, /* A/C message */
-  SOURCE_MLAT, /* derived from mlat */
   SOURCE_SBS, /* data is of unknown quality */
+  SOURCE_MLAT, /* derived from mlat */
   SOURCE_MODE_S, /* data from a Mode S message, no full CRC */
   SOURCE_MODE_S_CHECKED, /* data from a Mode S message with full CRC */
   SOURCE_TISB, /* data from a TIS-B extended squitter message */

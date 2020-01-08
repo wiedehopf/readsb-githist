@@ -670,6 +670,9 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
         mm->decoded_nic = new_nic;
         mm->decoded_rc = new_rc;
 
+        // update addrtype, we use the type from the accepted position.
+        a->addrtype = mm->addrtype;
+
         if (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2) {
             globe_stuff(a, new_lat, new_lon, mm->sysTimestampMsg);
         }
@@ -1365,6 +1368,10 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
     if (mm->sbs_in && mm->sbs_pos_valid) {
         if (accept_data(&a->position_valid, mm->source, mm, 0)) {
+
+            // update addrtype, we use the type from the accepted position.
+            a->addrtype = mm->addrtype;
+
             globe_stuff(a, mm->decoded_lat, mm->decoded_lon, mm->sysTimestampMsg);
 
             a->lat = mm->decoded_lat;
