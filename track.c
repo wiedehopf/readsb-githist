@@ -123,38 +123,38 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
 #define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
     F(callsign, 60, 900); // ADS-B or Comm-B
     F(altitude_baro, 15, 900); // ADS-B or Mode S
-    F(altitude_geom, 60, 70); // ADS-B only
-    F(geom_delta, 60, 70); // ADS-B only
-    F(gs, 60, 900); // ADS-B or Comm-B
-    F(ias, 60, 70); // ADS-B (rare) or Comm-B
-    F(tas, 60, 70); // ADS-B (rare) or Comm-B
-    F(mach, 60, 70); // Comm-B only
-    F(track, 60, 900); // ADS-B or Comm-B
-    F(track_rate, 60, 70); // Comm-B only
-    F(roll, 60, 70); // Comm-B only
-    F(mag_heading, 60, 70); // ADS-B (rare) or Comm-B
-    F(true_heading, 60, 70); // ADS-B only (rare)
-    F(baro_rate, 60, 70); // ADS-B or Comm-B
-    F(geom_rate, 60, 70); // ADS-B or Comm-B
+    F(altitude_geom, 30, 70); // ADS-B only
+    F(geom_delta, 30, 70); // ADS-B only
+    F(gs, 30, 900); // ADS-B or Comm-B
+    F(ias, 30, 70); // ADS-B (rare) or Comm-B
+    F(tas, 30, 70); // ADS-B (rare) or Comm-B
+    F(mach, 30, 70); // Comm-B only
+    F(track, 30, 900); // ADS-B or Comm-B
+    F(track_rate, 30, 70); // Comm-B only
+    F(roll, 30, 70); // Comm-B only
+    F(mag_heading, 30, 70); // ADS-B (rare) or Comm-B
+    F(true_heading, 30, 70); // ADS-B only (rare)
+    F(baro_rate, 30, 70); // ADS-B or Comm-B
+    F(geom_rate, 30, 70); // ADS-B or Comm-B
     F(squawk, 15, 70); // ADS-B or Mode S
     F(airground, 15, 70); // ADS-B or Mode S
-    F(nav_qnh, 60, 70); // Comm-B only
-    F(nav_altitude_mcp, 60, 70);  // ADS-B or Comm-B
-    F(nav_altitude_fms, 60, 70);  // ADS-B or Comm-B
-    F(nav_altitude_src, 60, 70); // ADS-B or Comm-B
-    F(nav_heading, 60, 70); // ADS-B or Comm-B
-    F(nav_modes, 60, 70); // ADS-B or Comm-B
-    F(cpr_odd, 60, 70); // ADS-B only
-    F(cpr_even, 60, 70); // ADS-B only
-    F(position, 60, 900); // ADS-B only
-    F(nic_a, 60, 70); // ADS-B only
-    F(nic_c, 60, 70); // ADS-B only
-    F(nic_baro, 60, 70); // ADS-B only
-    F(nac_p, 60, 70); // ADS-B only
-    F(nac_v, 60, 70); // ADS-B only
-    F(sil, 60, 70); // ADS-B only
-    F(gva, 60, 70); // ADS-B only
-    F(sda, 60, 70); // ADS-B only
+    F(nav_qnh, 30, 70); // Comm-B only
+    F(nav_altitude_mcp, 30, 70);  // ADS-B or Comm-B
+    F(nav_altitude_fms, 30, 70);  // ADS-B or Comm-B
+    F(nav_altitude_src, 30, 70); // ADS-B or Comm-B
+    F(nav_heading, 30, 70); // ADS-B or Comm-B
+    F(nav_modes, 30, 70); // ADS-B or Comm-B
+    F(cpr_odd, 10, 70); // ADS-B only
+    F(cpr_even, 10, 70); // ADS-B only
+    F(position, 10, 900); // ADS-B only
+    F(nic_a, 30, 70); // ADS-B only
+    F(nic_c, 30, 70); // ADS-B only
+    F(nic_baro, 30, 70); // ADS-B only
+    F(nac_p, 30, 70); // ADS-B only
+    F(nac_v, 30, 70); // ADS-B only
+    F(sil, 30, 70); // ADS-B only
+    F(gva, 30, 70); // ADS-B only
+    F(sda, 30, 70); // ADS-B only
 #undef F
 
     Modes.stats_current.unique_aircraft++;
