@@ -2128,10 +2128,10 @@ struct char_buffer generateTraceJson(struct aircraft *a) {
                 p = safe_snprintf(p, end, "[%.1f,%f,%f",
                         (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6);
 
-                if (alt_unknown)
-                    p = safe_snprintf(p, end, ",null");
-                else if (on_ground)
+                if (on_ground)
                     p = safe_snprintf(p, end, ",\"ground\"");
+                else if (alt_unknown)
+                    p = safe_snprintf(p, end, ",null");
                 else
                     p = safe_snprintf(p, end, ",%d", altitude);
 
