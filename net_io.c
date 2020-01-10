@@ -2099,19 +2099,19 @@ retry:
     return cb;
 }
 
-struct char_buffer generateTraceJson(struct aircraft *a) {
+struct char_buffer generateTraceJson(struct aircraft *a, int start) {
     struct char_buffer cb;
     int buflen = a->trace_len * 80 + 1024;
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
 
     p = safe_snprintf(p, end, "{\"icao\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
 
-    if (a->trace_len > 0) {
-        p = safe_snprintf(p, end, ",\n\"timestamp\": %.3f", a->trace->timestamp / 1000.0);
+    if (a->trace_len > start) {
+        p = safe_snprintf(p, end, ",\n\"timestamp\": %.3f", (a->trace + start)->timestamp / 1000.0);
 
         p = safe_snprintf(p, end, ",\n\"trace\":[ ");
 
-        for (int i = 0; i < a->trace_len; i++) {
+        for (int i = start; i < a->trace_len; i++) {
             struct state *trace = &a->trace[i];
 
             int32_t altitude = trace->altitude;
@@ -2126,7 +2126,7 @@ struct char_buffer generateTraceJson(struct aircraft *a) {
 
                 // in the air
                 p = safe_snprintf(p, end, "[%.1f,%f,%f",
-                        (trace->timestamp - a->trace->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6);
+                        (trace->timestamp - (a->trace + start)->timestamp) / 1000.0, trace->lat / 1E6, trace->lon / 1E6);
 
                 if (on_ground)
                     p = safe_snprintf(p, end, ",\"ground\"");

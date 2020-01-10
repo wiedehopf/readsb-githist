@@ -411,13 +411,25 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
 
         for (int j = start; j < end; j++) {
             for (a = Modes.aircrafts[j]; a; a = a->next) {
-                if (a->trace_len == a->trace_len_last_write)
-                    continue;
                 pthread_mutex_lock(a->trace_mutex);
 
+                if (a->trace_len == a->trace_len_last_write) {
+                    pthread_mutex_unlock(a->trace_mutex);
+                    continue;
+                }
+
+                snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                writeJsonToFile(filename, generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0));
+
                 a->trace_len_last_write = a->trace_len;
-                snprintf(filename, 256, "traces/%02x/trace_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                writeJsonToFile(filename, generateTraceJson(a));
+
+                if (a->trace_len >= a->trace_len_last_full_write + 141) {
+
+                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                    writeJsonToFile(filename, generateTraceJson(a, 0));
+
+                    a->trace_len_last_full_write = a->trace_len;
+                }
 
                 pthread_mutex_unlock(a->trace_mutex);
             }

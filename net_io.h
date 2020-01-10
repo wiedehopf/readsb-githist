@@ -152,7 +152,7 @@ void modesReadSerialClient(void);
 
 // TODO: move these somewhere else
 struct char_buffer generateAircraftJson(int globe_index);
-struct char_buffer generateTraceJson(struct aircraft *a);
+struct char_buffer generateTraceJson(struct aircraft *a, int start);
 struct char_buffer generateStatsJson ();
 struct char_buffer generateReceiverJson ();
 struct char_buffer generateHistoryJson ();

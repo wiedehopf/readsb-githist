@@ -117,6 +117,7 @@ struct aircraft
   struct state *trace; // array of positions representing the aircrafts trace/trail
   int32_t trace_len; // current number of points in the trace
   int32_t trace_len_last_write; // number of points in the trace at time of last write
+  int32_t trace_len_last_full_write;
   double trace_llat; // last saved lat
   double trace_llon; // last saved lon
   pthread_mutex_t *mutex;

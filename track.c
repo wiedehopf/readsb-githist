@@ -1614,7 +1614,9 @@ static void cleanupAircraft(struct aircraft *a) {
         iter = iter->next;
         if (a->trace_mutex) {
             char filename[256];
-            snprintf(filename, 256, "traces/%02x/trace_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            unlink(filename);
+            snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
             unlink(filename);
             pthread_mutex_unlock(a->trace_mutex);
             pthread_mutex_destroy(a->trace_mutex);
@@ -1648,6 +1650,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         if (!a->trace) {
             a->trace = malloc(GLOBE_TRACE_SIZE * sizeof(struct state));
             a->trace->timestamp = now;
+            a->trace_len_last_full_write = -10000;
         }
 
         struct state *trace = a->trace;
@@ -1671,6 +1674,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             pthread_mutex_lock(a->trace_mutex);
             a->trace_len -= new_start;
             memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
+            a->trace_len_last_full_write = -10000;
             pthread_mutex_unlock(a->trace_mutex);
         }
 
