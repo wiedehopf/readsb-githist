@@ -1651,7 +1651,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         }
 
         struct state *trace = a->trace;
-        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + 24 * (3600 + 900) * 1000) {
+        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 900) * 1000) {
             int new_start = GLOBE_TRACE_SIZE / 64;
 
             if (a->trace_len < GLOBE_TRACE_SIZE) {
