@@ -1029,7 +1029,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     a->messages++;
 
     // update addrtype, we only ever go towards "more direct" types
-    if (mm->addrtype < a->addrtype) {
+    if (mm->addrtype < a->addrtype && _messageNow - a->position_valid.updated > 30 * 1000) {
         a->addrtype = mm->addrtype;
     }
 
