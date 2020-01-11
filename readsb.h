@@ -136,9 +136,9 @@ typedef enum
   SOURCE_SBS, /* data is of unknown quality */
   SOURCE_MLAT, /* derived from mlat */
   SOURCE_MODE_S, /* data from a Mode S message, no full CRC */
+  SOURCE_JAERO, /* data is from satellite ADS-C */
   SOURCE_MODE_S_CHECKED, /* data from a Mode S message with full CRC */
   SOURCE_TISB, /* data from a TIS-B extended squitter message */
-  SOURCE_JAERO, /* data is from satellite ADS-C */
   SOURCE_ADSR, /* data from a ADS-R extended squitter message */
   SOURCE_ADSB, /* data from a ADS-B extended squitter message */
   SOURCE_PRIO, /* priority input */

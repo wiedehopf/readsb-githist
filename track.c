@@ -1614,9 +1614,9 @@ static void cleanupAircraft(struct aircraft *a) {
         iter = iter->next;
         if (a->trace_mutex) {
             char filename[256];
-            snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
             unlink(filename);
-            snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
             unlink(filename);
             pthread_mutex_unlock(a->trace_mutex);
             pthread_mutex_destroy(a->trace_mutex);
@@ -1655,7 +1655,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         struct state *trace = a->trace;
         if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 900) * 1000) {
-            int new_start = GLOBE_TRACE_SIZE / 64;
+            int new_start = GLOBE_TRACE_SIZE / 32;
 
             if (a->trace_len < GLOBE_TRACE_SIZE) {
                 int found = 0;
