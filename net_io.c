@@ -63,6 +63,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <poll.h>
+#include <zlib.h>
 
 //
 // ============================= Networking =============================
@@ -2360,8 +2361,9 @@ struct char_buffer generateReceiverJson() {
 }
 
 // Write JSON to file
-void writeJsonToFile (const char *file, struct char_buffer cb) {
+static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzip) {
 #ifndef _WIN32
+
     char pathbuf[PATH_MAX];
     char tmppath[PATH_MAX];
     int fd;
@@ -2386,11 +2388,25 @@ void writeJsonToFile (const char *file, struct char_buffer cb) {
     umask(mask);
     fchmod(fd, 0644 & ~mask);
 
-    if (write(fd, content, len) != len)
-        goto error_1;
+    if (gzip) {
+        gzFile gzfp = gzdopen(fd, "wb");
+        if (!gzfp)
+            goto error_1;
 
-    if (close(fd) < 0)
-        goto error_2;
+        gzbuffer(gzfp, 256 * 1024);
+
+        if (gzwrite(gzfp, content, len) != len)
+            goto error_1;
+
+        if (gzclose(gzfp) < 0)
+            goto error_2;
+    } else {
+        if (write(fd, content, len) != len)
+            goto error_1;
+
+        if (close(fd) < 0)
+            goto error_2;
+    }
 
     snprintf(pathbuf, PATH_MAX, "%s/%s", Modes.json_dir, file);
     pathbuf[PATH_MAX - 1] = 0;
@@ -2406,6 +2422,15 @@ error_2:
     return;
 #endif
 }
+
+void writeJsonToFile (const char *file, struct char_buffer cb) {
+    writeJsonTo(file, cb, 0);
+}
+
+void writeJsonToGzip (const char *file, struct char_buffer cb) {
+    writeJsonTo(file, cb, 1);
+}
+
 static void periodicReadFromClient(struct client *c) {
     int nread, err;
     char buf[512];

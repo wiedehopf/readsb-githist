@@ -418,15 +418,15 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                     continue;
                 }
 
-                snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                writeJsonToFile(filename, generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0));
+                snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                writeJsonToGzip(filename, generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0));
 
                 a->trace_len_last_write = a->trace_len;
 
-                if (a->trace_len >= a->trace_len_last_full_write + 141) {
+                if (a->trace_len >= a->trace_len_last_full_write + 135) {
 
-                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                    writeJsonToFile(filename, generateTraceJson(a, 0));
+                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                    writeJsonToGzip(filename, generateTraceJson(a, 0));
 
                     a->trace_len_last_full_write = a->trace_len;
                 }
