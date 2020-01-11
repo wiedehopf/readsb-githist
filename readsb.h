@@ -277,7 +277,7 @@ typedef enum {
 
 #define AIRCRAFTS_BUCKETS (1<<16)
 
-#define GLOBE_TRACE_SIZE 2048
+#define GLOBE_TRACE_SIZE 3072
 
 // Include subheaders after all the #defines are in place
 

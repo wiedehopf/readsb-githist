@@ -1680,7 +1680,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         struct state *new = &(trace[a->trace_len]);
         int on_ground = 0;
-        float turn_density = 6;
+        float turn_density = 5;
         float track = a->track;
 
         if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND) {
