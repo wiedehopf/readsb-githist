@@ -1019,7 +1019,7 @@ static int decodeSbsLine(struct client *c, char *line, int remote) {
         mm.decoded_lon = strtod(t[16], NULL);
         if (mm.decoded_lat != 0 && mm.decoded_lon != 0)
             mm.sbs_pos_valid = 1;
-        //fprintf(stderr, "pos: (%.2f, %.2f), ", mm.decoded_lat, mm.decoded_lon);
+        //fprintf(stderr, "pos: (%.2f, %.2f)\n", mm.decoded_lat, mm.decoded_lon);
     }
     // field 17 vertical rate, assume baro
     if (t[17] && strlen(t[17]) > 0) {
@@ -1963,23 +1963,19 @@ struct char_buffer generateAircraftJson(int globe_index){
 
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         for (a = Modes.aircrafts[j]; a; a = a->next) {
-            if (a->messages < 2) { // basic filter for bad decodes
-                continue;
-            }
-
-            if (globe_index >= 0) {
-                if (a->globe_index != globe_index)
-                    continue;
-                if (a->position_valid.source != SOURCE_JAERO && (now - a->seen_pos > 90 * 1000))
-                    continue;
-                if (a->position_valid.source == SOURCE_JAERO && (now - a->seen_pos > 900 * 1000))
-                    continue;
-            } else {
-                if ((now - a->seen) > 90 * 1000) // don't include stale aircraft in the JSON
-                    continue;
-            }
 
             pthread_mutex_lock(a->mutex);
+            if (globe_index >= 0) {
+                if (a->globe_index != globe_index)
+                    goto gonext;
+                if (!trackDataValid(&a->position_valid)) {
+                    //fprintf(stderr, "a: %06x\n", a->addr);
+                    goto gonext;
+                }
+            } else {
+                if ((now - a->seen) > 90 * 1000) // don't include stale aircraft in the JSON
+                    goto gonext;
+            }
 
             if (first)
                 first = 0;
@@ -2069,6 +2065,8 @@ retry:
 
             if (a->position_valid.source == SOURCE_JAERO)
                 p = safe_snprintf(p, end, ",\"jaero\": true");
+            if (a->position_valid.source == SOURCE_SBS)
+                p = safe_snprintf(p, end, ",\"sbs_other\": true");
 
             p = safe_snprintf(p, end, ",\"mlat\":");
             p = append_flags(p, end, a, SOURCE_MLAT);
@@ -2089,6 +2087,7 @@ retry:
                 end = buf + buflen;
                 goto retry;
             }
+gonext:
             pthread_mutex_unlock(a->mutex);
         }
     }

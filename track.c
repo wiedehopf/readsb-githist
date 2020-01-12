@@ -63,6 +63,7 @@ uint32_t modeAC_age[4096];
 
 static void cleanupAircraft(struct aircraft *a);
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now);
+static void adjustExpire(struct aircraft *a, uint64_t timeout);
 
 //
 // Return a new aircraft structure for the linked list of tracked
@@ -120,42 +121,7 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     }
 
     // initialize data validity ages
-#define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
-    F(callsign, 60, 900); // ADS-B or Comm-B
-    F(altitude_baro, 15, 900); // ADS-B or Mode S
-    F(altitude_geom, 30, 70); // ADS-B only
-    F(geom_delta, 30, 70); // ADS-B only
-    F(gs, 30, 900); // ADS-B or Comm-B
-    F(ias, 30, 70); // ADS-B (rare) or Comm-B
-    F(tas, 30, 70); // ADS-B (rare) or Comm-B
-    F(mach, 30, 70); // Comm-B only
-    F(track, 30, 900); // ADS-B or Comm-B
-    F(track_rate, 30, 70); // Comm-B only
-    F(roll, 30, 70); // Comm-B only
-    F(mag_heading, 30, 70); // ADS-B (rare) or Comm-B
-    F(true_heading, 30, 70); // ADS-B only (rare)
-    F(baro_rate, 30, 70); // ADS-B or Comm-B
-    F(geom_rate, 30, 70); // ADS-B or Comm-B
-    F(squawk, 15, 70); // ADS-B or Mode S
-    F(airground, 15, 70); // ADS-B or Mode S
-    F(nav_qnh, 30, 70); // Comm-B only
-    F(nav_altitude_mcp, 30, 70);  // ADS-B or Comm-B
-    F(nav_altitude_fms, 30, 70);  // ADS-B or Comm-B
-    F(nav_altitude_src, 30, 70); // ADS-B or Comm-B
-    F(nav_heading, 30, 70); // ADS-B or Comm-B
-    F(nav_modes, 30, 70); // ADS-B or Comm-B
-    F(cpr_odd, 10, 70); // ADS-B only
-    F(cpr_even, 10, 70); // ADS-B only
-    F(position, 10, 900); // ADS-B only
-    F(nic_a, 30, 70); // ADS-B only
-    F(nic_c, 30, 70); // ADS-B only
-    F(nic_baro, 30, 70); // ADS-B only
-    F(nac_p, 30, 70); // ADS-B only
-    F(nac_v, 30, 70); // ADS-B only
-    F(sil, 30, 70); // ADS-B only
-    F(gva, 30, 70); // ADS-B only
-    F(sda, 30, 70); // ADS-B only
-#undef F
+    adjustExpire(a, 58);
 
     Modes.stats_current.unique_aircraft++;
 
@@ -1029,7 +995,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     a->messages++;
 
     // update addrtype, we only ever go towards "more direct" types
-    if (mm->addrtype < a->addrtype && _messageNow - a->position_valid.updated > 30 * 1000) {
+    if (mm->addrtype < a->addrtype && _messageNow > 30 * 1000 +  a->position_valid.updated)  {
         a->addrtype = mm->addrtype;
     }
 
@@ -1050,6 +1016,12 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     default:
         message_version = &dummy_version;
         break;
+    }
+
+    if (mm->source == SOURCE_JAERO) {
+        adjustExpire(a, 33 * 60);
+    } else {
+        adjustExpire(a, 58);
     }
 
     // assume version 0 until we see something else
@@ -1367,8 +1339,13 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
 
     if (mm->sbs_in && mm->sbs_pos_valid) {
-        if (accept_data(&a->position_valid, mm->source, mm, 0)) {
-
+        if (trackDataValid(&a->position_valid)
+                && mm->source <= a->position_valid.source
+                && !speed_check(a, mm->decoded_lat, mm->decoded_lon, (mm->airground == AG_GROUND))
+           )
+        {
+            // speed check failed, do nothing
+        } else if (accept_data(&a->position_valid, mm->source, mm, 0)) {
             // update addrtype, we use the type from the accepted position.
             a->addrtype = mm->addrtype;
 
@@ -1379,6 +1356,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
             a->pos_reliable_odd = 2;
             a->pos_reliable_even = 2;
+
+            if (a->messages < 2)
+                a->messages = 2;
         }
     }
 
@@ -1501,6 +1481,8 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->messages == 1)
                     Modes.stats_current.single_message_aircraft++;
 
+                //fprintf(stderr, "del: %06x\n", a->addr);
+
                 // Remove the element from the linked list, with care
                 // if we are removing the first element
                 struct aircraft *del = a;
@@ -1552,8 +1534,9 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 EXPIRE(sda);
 #undef EXPIRE
 
-                if (trackDataValid(&a->position_valid))
+                if (trackDataValid(&a->position_valid)) {
                     with_pos++;
+                }
 
                 // reset position reliability when the position has expired
                 if (a->position_valid.source == SOURCE_INVALID) {
@@ -1563,6 +1546,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
 
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
+
 
                 prev = a;
                 a = a->next;
@@ -1636,8 +1620,12 @@ static void cleanupAircraft(struct aircraft *a) {
 
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now) {
 
+    //fprintf(stderr, "globe: (%.2f, %.2f)\n", new_lat, new_lon);
+
     if (!trackDataValid(&a->track_valid) && a->pos_set) {
-        a->calc_track = bearing(a->lat, a->lon, new_lat, new_lon);
+        double distance = greatcircle(a->lat, a->lon, new_lat, new_lon);
+        if (distance > 100)
+            a->calc_track = bearing(a->lat, a->lon, new_lat, new_lon);
     } else {
         a->calc_track = 0;
     }
@@ -1793,3 +1781,41 @@ no_save_state:
 
 }
 
+static void adjustExpire(struct aircraft *a, uint64_t timeout) {
+#define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
+    F(callsign, 60,  timeout); // ADS-B or Comm-B
+    F(altitude_baro, 15,  timeout); // ADS-B or Mode S
+    F(altitude_geom, 30, timeout); // ADS-B only
+    F(geom_delta, 30, timeout); // ADS-B only
+    F(gs, 30,  timeout); // ADS-B or Comm-B
+    F(ias, 30, timeout); // ADS-B (rare) or Comm-B
+    F(tas, 30, timeout); // ADS-B (rare) or Comm-B
+    F(mach, 30, timeout); // Comm-B only
+    F(track, 30,  timeout); // ADS-B or Comm-B
+    F(track_rate, 30, timeout); // Comm-B only
+    F(roll, 30, timeout); // Comm-B only
+    F(mag_heading, 30, timeout); // ADS-B (rare) or Comm-B
+    F(true_heading, 30, timeout); // ADS-B only (rare)
+    F(baro_rate, 30, timeout); // ADS-B or Comm-B
+    F(geom_rate, 30, timeout); // ADS-B or Comm-B
+    F(squawk, 15, timeout); // ADS-B or Mode S
+    F(airground, 15, timeout); // ADS-B or Mode S
+    F(nav_qnh, 30, timeout); // Comm-B only
+    F(nav_altitude_mcp, 30, timeout);  // ADS-B or Comm-B
+    F(nav_altitude_fms, 30, timeout);  // ADS-B or Comm-B
+    F(nav_altitude_src, 30, timeout); // ADS-B or Comm-B
+    F(nav_heading, 30, timeout); // ADS-B or Comm-B
+    F(nav_modes, 30, timeout); // ADS-B or Comm-B
+    F(cpr_odd, 10, timeout); // ADS-B only
+    F(cpr_even, 10, timeout); // ADS-B only
+    F(position, 10,  timeout); // ADS-B only
+    F(nic_a, 30, timeout); // ADS-B only
+    F(nic_c, 30, timeout); // ADS-B only
+    F(nic_baro, 30, timeout); // ADS-B only
+    F(nac_p, 30, timeout); // ADS-B only
+    F(nac_v, 30, timeout); // ADS-B only
+    F(sil, 30, timeout); // ADS-B only
+    F(gva, 30, timeout); // ADS-B only
+    F(sda, 30, timeout); // ADS-B only
+#undef F
+}
