@@ -64,6 +64,7 @@ uint32_t modeAC_age[4096];
 static void cleanupAircraft(struct aircraft *a);
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now);
 static void adjustExpire(struct aircraft *a, uint64_t timeout);
+static void position_bad(struct aircraft *a);
 
 //
 // Return a new aircraft structure for the linked list of tracked
@@ -559,18 +560,7 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
             // At least one of the CPRs is bad, mark them both invalid.
             // If we are not confident in the position, invalidate it as well.
 
-            Modes.stats_current.cpr_global_bad++;
-
-            a->cpr_odd_valid.source = SOURCE_INVALID;
-            a->cpr_even_valid.source = SOURCE_INVALID;
-            a->pos_reliable_odd--;
-            a->pos_reliable_even--;
-
-            if (a->pos_reliable_odd <= 0 || a->pos_reliable_even <=0) {
-                a->position_valid.source = SOURCE_INVALID;
-                a->pos_reliable_odd = 0;
-                a->pos_reliable_even = 0;
-            }
+            position_bad(a);
 
             return;
         } else if (location_result == -1) {
@@ -1344,6 +1334,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
                 && !speed_check(a, mm->decoded_lat, mm->decoded_lon, (mm->airground == AG_GROUND))
            )
         {
+            if (mm->source == a->position_valid.source) {
+                position_bad(a);
+            }
             // speed check failed, do nothing
         } else if (accept_data(&a->position_valid, mm->source, mm, 0)) {
             // update addrtype, we use the type from the accepted position.
@@ -1354,8 +1347,15 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
             a->lat = mm->decoded_lat;
             a->lon = mm->decoded_lon;
 
-            a->pos_reliable_odd = 2;
-            a->pos_reliable_even = 2;
+            if (a->position_valid.source == SOURCE_JAERO &&
+                    a->pos_reliable_odd < 2 &&
+                    a->pos_reliable_even < 2) {
+                a->pos_reliable_odd = 2;
+                a->pos_reliable_even = 2;
+            } else {
+                a->pos_reliable_odd = min(a->pos_reliable_odd + 1, Modes.filter_persistence);
+                a->pos_reliable_even = min(a->pos_reliable_even + 1, Modes.filter_persistence);
+            }
 
             if (a->messages < 2)
                 a->messages = 2;
@@ -1823,4 +1823,19 @@ static void adjustExpire(struct aircraft *a, uint64_t timeout) {
     F(gva, 30, timeout); // ADS-B only
     F(sda, 30, timeout); // ADS-B only
 #undef F
+}
+
+static void position_bad(struct aircraft *a) {
+    Modes.stats_current.cpr_global_bad++;
+
+    a->cpr_odd_valid.source = SOURCE_INVALID;
+    a->cpr_even_valid.source = SOURCE_INVALID;
+    a->pos_reliable_odd--;
+    a->pos_reliable_even--;
+
+    if (a->pos_reliable_odd <= 0 || a->pos_reliable_even <=0) {
+        a->position_valid.source = SOURCE_INVALID;
+        a->pos_reliable_odd = 0;
+        a->pos_reliable_even = 0;
+    }
 }
