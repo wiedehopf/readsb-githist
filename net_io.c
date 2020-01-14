@@ -1964,20 +1964,21 @@ struct char_buffer generateAircraftJson(int globe_index){
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         for (a = Modes.aircrafts[j]; a; a = a->next) {
 
+            pthread_mutex_lock(a->mutex);
+
             //fprintf(stderr, "a: %05x\n", a->addr);
             if (globe_index >= 0) {
                 if (a->globe_index != globe_index) {
-                    continue;
+                    goto gonext;
                 }
                 if (!trackDataValid(&a->position_valid)) {
-                    continue;
+                    goto gonext;
                 }
             }
 
             if (a->position_valid.source != SOURCE_JAERO && now - a->seen > 90 * 1000) // don't include stale aircraft in the JSON
-                continue;
+                goto gonext;
 
-            //pthread_mutex_lock(a->mutex);
 
             if (first)
                 first = 0;
@@ -2089,7 +2090,8 @@ retry:
                 end = buf + buflen;
                 goto retry;
             }
-            //pthread_mutex_unlock(a->mutex);
+gonext:
+            pthread_mutex_unlock(a->mutex);
         }
     }
 
