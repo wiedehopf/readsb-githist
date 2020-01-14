@@ -42,6 +42,11 @@ void init_globe_index(struct tile *s_tiles) {
     // East Russia
     s_tiles[count++] = (struct tile) {
         30, 90,
+        60, 120
+    };
+    // Koreas and Japan and some Russia
+    s_tiles[count++] = (struct tile) {
+        30, 120,
         60, 150
     };
 
@@ -56,9 +61,14 @@ void init_globe_index(struct tile *s_tiles) {
         10, 70,
         30, 90
     };
+
     // South China and ICAO special use
     s_tiles[count++] = (struct tile) {
         10, 90,
+        30, 110
+    };
+    s_tiles[count++] = (struct tile) {
+        10, 110,
         30, 150
     };
 
