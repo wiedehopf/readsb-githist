@@ -1975,10 +1975,9 @@ struct char_buffer generateAircraftJson(int globe_index){
                     goto gonext;
                 }
             }
-
-            if (a->position_valid.source != SOURCE_JAERO && now - a->seen > 90 * 1000) // don't include stale aircraft in the JSON
+            // don't include stale aircraft in the JSON
+            if (a->position_valid.source != SOURCE_JAERO && now > a->seen + 90 * 1000)
                 goto gonext;
-
 
             if (first)
                 first = 0;
@@ -2096,6 +2095,9 @@ gonext:
     }
 
     p = safe_snprintf(p, end, "\n  ]\n}\n");
+
+    //if (globe_index == -1)
+    //    fprintf(stderr, "%u\n", ac_counter);
 
     cb.len = p - buf;
     cb.buffer = buf;

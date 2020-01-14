@@ -1468,8 +1468,10 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
         struct aircraft *a = Modes.aircrafts[j];
         struct aircraft *prev = NULL;
 
-        // +5 for small clock jumps, doesn't hurt in any case.
-        uint64_t now = mstime() + 5;
+        // +50 for small clock jumps, doesn't hurt in any case.
+        // shouldn't be an issue as this routine is not concurrent
+        // other threads stop operation before this section.
+        uint64_t now = mstime() + 50;
 
         while (a) {
             if ((now - a->seen) > TRACK_AIRCRAFT_TTL ||

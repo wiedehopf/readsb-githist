@@ -289,7 +289,7 @@ extern uint32_t modeAC_age[4096];
 static inline int
 trackDataValid (const data_validity *v)
 {
-  return (v->source != SOURCE_INVALID && messageNow () < v->expires);
+  return (v->source != SOURCE_INVALID);
 }
 
 /* is this bit of data fresh? */
