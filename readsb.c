@@ -129,6 +129,8 @@ static void sigintHandler(int dummy) {
         pthread_kill(Modes.decodeThread, SIGUSR1);
     if (Modes.jsonThread)
         pthread_kill(Modes.jsonThread, SIGUSR1);
+    if (Modes.jsonGlobeThread)
+        pthread_kill(Modes.jsonGlobeThread, SIGUSR1);
     if (Modes.jsonTraceThread)
         pthread_kill(Modes.jsonTraceThread, SIGUSR1);
     signal(SIGINT, SIG_DFL); // reset signal handler - bit extra safety
@@ -142,6 +144,8 @@ static void sigtermHandler(int dummy) {
         pthread_kill(Modes.decodeThread, SIGUSR1);
     if (Modes.jsonThread)
         pthread_kill(Modes.jsonThread, SIGUSR1);
+    if (Modes.jsonGlobeThread)
+        pthread_kill(Modes.jsonGlobeThread, SIGUSR1);
     if (Modes.jsonTraceThread)
         pthread_kill(Modes.jsonTraceThread, SIGUSR1);
     signal(SIGTERM, SIG_DFL); // reset signal handler - bit extra safety
@@ -203,6 +207,7 @@ static void modesInit(void) {
 
     pthread_mutex_init(&Modes.decodeThreadMutex, NULL);
     pthread_mutex_init(&Modes.jsonThreadMutex, NULL);
+    pthread_mutex_init(&Modes.jsonGlobeThreadMutex, NULL);
     pthread_mutex_init(&Modes.jsonTraceThreadMutex, NULL);
 
     Modes.sample_rate = (double)2400000.0;
@@ -345,24 +350,61 @@ static void *jsonThreadEntryPoint(void *arg) {
             Modes.json_aircraft_history_next = (Modes.json_aircraft_history_next + 1) % HISTORY_SIZE;
             next_history = now + HISTORY_INTERVAL;
         }
+    }
 
-        if (Modes.json_globe_index) {
-            char filename[32];
+    pthread_mutex_unlock(&Modes.jsonThreadMutex);
 
-            for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
+#ifndef _WIN32
+    pthread_exit(NULL);
+#else
+    return NULL;
+#endif
+}
+
+static void *jsonGlobeThreadEntryPoint(void *arg) {
+    MODES_NOTUSED(arg);
+
+    static int part;
+    int n_parts = 4; // power of 2
+
+    uint64_t sleep = Modes.json_interval / (2 * n_parts);
+    // write twice every json interval
+
+    struct timespec slp = {0, 0};
+    slp.tv_sec =  (sleep / 1000);
+    slp.tv_nsec = (sleep % 1000) * 1000 * 1000;
+
+    pthread_mutex_lock(&Modes.jsonGlobeThreadMutex);
+
+    while (!Modes.exit) {
+        char filename[32];
+
+        pthread_mutex_unlock(&Modes.jsonGlobeThreadMutex);
+
+        nanosleep(&slp, NULL);
+
+        pthread_mutex_lock(&Modes.jsonGlobeThreadMutex);
+
+        for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
+            if (i % n_parts == part) {
                 snprintf(filename, 31, "globe_%04d.json", i);
                 writeJsonToFile(filename, generateAircraftJson(i));
             }
-            for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
+        }
+        for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
+            if (i % n_parts == part) {
                 if (globe_index_index(i) >= GLOBE_MIN_INDEX) {
                     snprintf(filename, 31, "globe_%04d.json", i);
                     writeJsonToFile(filename, generateAircraftJson(i));
                 }
             }
         }
+
+        part++;
+        part %= n_parts;
     }
 
-    pthread_mutex_unlock(&Modes.jsonThreadMutex);
+    pthread_mutex_unlock(&Modes.jsonGlobeThreadMutex);
 
 #ifndef _WIN32
     pthread_exit(NULL);
@@ -578,6 +620,7 @@ static void *decodeThreadEntryPoint(void *arg) {
         pthread_mutex_destroy(&Modes.data_mutex);
         pthread_mutex_destroy(&Modes.decodeThreadMutex);
         pthread_mutex_destroy(&Modes.jsonThreadMutex);
+        pthread_mutex_destroy(&Modes.jsonGlobeThreadMutex);
         pthread_mutex_destroy(&Modes.jsonTraceThreadMutex);
     }
 
@@ -1141,9 +1184,12 @@ int main(int argc, char **argv) {
     pthread_create(&Modes.decodeThread, NULL, decodeThreadEntryPoint, NULL);
 
     if (Modes.json_dir) {
+
         pthread_create(&Modes.jsonThread, NULL, jsonThreadEntryPoint, NULL);
 
         if (Modes.json_globe_index) {
+            pthread_create(&Modes.jsonGlobeThread, NULL, jsonGlobeThreadEntryPoint, NULL);
+
             pthread_create(&Modes.jsonTraceThread, NULL, jsonTraceThreadEntryPoint, NULL);
         }
     }
@@ -1163,6 +1209,7 @@ int main(int argc, char **argv) {
         pthread_join(Modes.jsonThread, NULL); // Wait on json writer thread exit
 
         if (Modes.json_globe_index) {
+            pthread_join(Modes.jsonGlobeThread, NULL); // Wait on json writer thread exit
             pthread_join(Modes.jsonTraceThread, NULL); // Wait on json writer thread exit
         }
     }

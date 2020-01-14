@@ -1910,7 +1910,7 @@ struct char_buffer generateAircraftJson(int globe_index){
     struct char_buffer cb;
     uint64_t now = mstime();
     struct aircraft *a;
-    int buflen = 256*1024; // The initial buffer is resized as needed
+    int buflen = 64*1024; // The initial buffer is resized as needed
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
     char *line_start;
     int first = 1;
@@ -1964,18 +1964,20 @@ struct char_buffer generateAircraftJson(int globe_index){
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         for (a = Modes.aircrafts[j]; a; a = a->next) {
 
-            pthread_mutex_lock(a->mutex);
+            //fprintf(stderr, "a: %05x\n", a->addr);
             if (globe_index >= 0) {
-                if (a->globe_index != globe_index)
-                    goto gonext;
-                if (!trackDataValid(&a->position_valid)) {
-                    //fprintf(stderr, "a: %06x\n", a->addr);
-                    goto gonext;
+                if (a->globe_index != globe_index) {
+                    continue;
                 }
-            } else {
-                if ((now - a->seen) > 90 * 1000) // don't include stale aircraft in the JSON
-                    goto gonext;
+                if (!trackDataValid(&a->position_valid)) {
+                    continue;
+                }
             }
+
+            if (a->position_valid.source != SOURCE_JAERO && now - a->seen > 90 * 1000) // don't include stale aircraft in the JSON
+                continue;
+
+            //pthread_mutex_lock(a->mutex);
 
             if (first)
                 first = 0;
@@ -2087,8 +2089,7 @@ retry:
                 end = buf + buflen;
                 goto retry;
             }
-gonext:
-            pthread_mutex_unlock(a->mutex);
+            //pthread_mutex_unlock(a->mutex);
         }
     }
 

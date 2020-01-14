@@ -1474,6 +1474,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
         while (a) {
             if ((now - a->seen) > TRACK_AIRCRAFT_TTL ||
                     (a->messages == 1 && (now - a->seen) > TRACK_AIRCRAFT_ONEHIT_TTL) ||
+                    (a->messages <= 10 && (now - a->seen) > HOURS_5) ||
                     ((a->addr & MODES_NON_ICAO_ADDRESS) && (now - a->seen) > TRACK_AIRCRAFT_NON_ICAO_TTL)
                ) {
                 // Count aircraft where we saw only one message before reaping them.
@@ -1577,6 +1578,7 @@ void trackPeriodicUpdate() {
         // in the cache used by the json threads.
         pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
         pthread_mutex_lock(&Modes.jsonThreadMutex);
+        pthread_mutex_lock(&Modes.jsonGlobeThreadMutex);
         pthread_mutex_lock(&Modes.decodeThreadMutex);
 
         trackRemoveStaleAircraft(&freeList);
@@ -1584,6 +1586,7 @@ void trackPeriodicUpdate() {
 
         pthread_mutex_unlock(&Modes.decodeThreadMutex);
         pthread_mutex_unlock(&Modes.jsonThreadMutex);
+        pthread_mutex_unlock(&Modes.jsonGlobeThreadMutex);
         pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
 
         cleanupAircraft(freeList);

@@ -275,7 +275,7 @@ typedef enum {
 
 #define MODES_NOTUSED(V) ((void) V)
 
-#define AIRCRAFTS_BUCKETS (1<<16)
+#define AIRCRAFTS_BUCKETS (1<<15)
 
 #define GLOBE_TRACE_SIZE 3072
 
@@ -326,9 +326,11 @@ struct
   pthread_mutex_t data_mutex; // Mutex to synchronize buffer access
   pthread_t decodeThread; // thread writing json
   pthread_t jsonThread; // thread writing json
+  pthread_t jsonGlobeThread; // thread writing json
   pthread_t jsonTraceThread; // thread writing icao trace jsons
   pthread_mutex_t decodeThreadMutex;
   pthread_mutex_t jsonThreadMutex;
+  pthread_mutex_t jsonGlobeThreadMutex;
   pthread_mutex_t jsonTraceThreadMutex;
   unsigned first_free_buffer; // Entry in mag_buffers that will next be filled with input.
   unsigned first_filled_buffer; // Entry in mag_buffers that has valid data and will be demodulated next. If equal to next_free_buffer, there is no unprocessed data.
