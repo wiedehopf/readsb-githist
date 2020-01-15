@@ -987,7 +987,19 @@ static int decodeSbsLine(struct client *c, char *line, int remote) {
     //field 11, callsign
     if (t[11] && strlen(t[11]) > 0) {
         strncpy(mm.callsign, t[11], 9);
+        mm.callsign[8] = '\0';
         mm.callsign_valid = 1;
+        for (unsigned i = 0; i < 8; ++i) {
+            if (mm.callsign[i] == '\0')
+                mm.callsign[i] = ' ';
+            if (!(mm.callsign[i] >= 'A' && mm.callsign[i] <= 'Z') &&
+                    !(mm.callsign[i] >= '0' && mm.callsign[i] <= '9') &&
+                    mm.callsign[i] != ' ') {
+                // Bad callsign, ignore it
+                mm.callsign_valid = 0;
+                break;
+            }
+        }
         //fprintf(stderr, "call: %s, ", mm.callsign);
     }
     // field 12, altitude
@@ -1724,11 +1736,9 @@ __attribute__ ((format(printf, 3, 4))) static char *safe_snprintf(char *p, char 
 //
 // Return a description of planes in json. No metric conversion
 //
-// usual caveats about function-returning-pointer-to-static-buffer apply
-static const char *jsonEscapeString(const char *str) {
-    static char buf[1024];
+static const char *jsonEscapeString(const char *str, char *buf, int len) {
     const char *in = str;
-    char *out = buf, *end = buf + sizeof (buf) - 10;
+    char *out = buf, *end = buf + len - 10;
 
     for (; *in && out < end; ++in) {
         unsigned char ch = *in;
@@ -1987,8 +1997,10 @@ retry:
             p = safe_snprintf(p, end, "\n    {\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
             if (a->addrtype != ADDR_ADSB_ICAO)
                 p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
-            if (trackDataValid(&a->callsign_valid))
-                p = safe_snprintf(p, end, ",\"flight\":\"%s\"", jsonEscapeString(a->callsign));
+            if (trackDataValid(&a->callsign_valid)) {
+                char buf[128];
+                p = safe_snprintf(p, end, ",\"flight\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
+            }
             if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND)
                 p = safe_snprintf(p, end, ",\"alt_baro\":\"ground\"");
             else {
@@ -3301,7 +3313,8 @@ retry:
             }
 
             if (trackDataValid(&a->callsign_valid)) {
-                p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(a->callsign));
+                char buf[128];
+                p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
                 //p = safe_snprintf(p, end, ",\"CallSus\":false");
             }
 

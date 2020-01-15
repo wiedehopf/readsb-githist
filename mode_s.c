@@ -753,6 +753,8 @@ static void decodeESIdentAndCategory(struct modesMessage *mm) {
 
     // actually valid?
     for (unsigned i = 0; i < 8; ++i) {
+        if (mm->callsign[i] == '\0')
+            mm->callsign[i] = ' ';
         if (!(mm->callsign[i] >= 'A' && mm->callsign[i] <= 'Z') &&
             !(mm->callsign[i] >= '0' && mm->callsign[i] <= '9') &&
             mm->callsign[i] != ' ') {
