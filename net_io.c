@@ -1910,7 +1910,7 @@ struct char_buffer generateAircraftJson(int globe_index){
     struct char_buffer cb;
     uint64_t now = mstime();
     struct aircraft *a;
-    int buflen = 256*1024; // The initial buffer is resized as needed
+    int buflen = 512*1024; // The initial buffer is resized as needed
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
     char *line_start;
     int first = 1;
@@ -2078,7 +2078,7 @@ retry:
                     10 * log10((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
                             a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));
 
-            if ((p + 10) >= end) { // +10 to leave some space for the final line
+            if ((p + 100) >= end) { // +100 to leave some space for the final line
                 // overran the buffer
                 int used = line_start - buf;
                 buflen *= 2;
