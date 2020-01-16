@@ -367,7 +367,7 @@ static void *jsonGlobeThreadEntryPoint(void *arg) {
     static int part;
     int n_parts = 4; // power of 2
 
-    uint64_t sleep = Modes.json_interval / (2 * n_parts);
+    uint64_t sleep = Modes.json_interval / (3 * n_parts);
     // write twice every json interval
 
     struct timespec slp = {0, 0};
