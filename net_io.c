@@ -3448,7 +3448,9 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
         p = safe_snprintf(p, end, "]");
     }
     if (trackDataValid(&a->position_valid) && (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2))
-        p = safe_snprintf(p, end, ",\"lat\":%f,\"lon\":%f,\"nic\":%u,\"rc\":%u,\"seen_pos\":%.1f", a->lat, a->lon, a->pos_nic, a->pos_rc, (now - a->position_valid.updated) / 1000.0);
+        p = safe_snprintf(p, end, ",\"lat\":%f,\"lon\":%f,\"nic\":%u,\"rc\":%u,\"seen_pos\":%.1f",
+                a->lat, a->lon, a->pos_nic, a->pos_rc,
+                (now < a->position_valid.updated) ? 0 : ((now - a->position_valid.updated) / 1000.0));
     if (a->adsb_version >= 0)
         p = safe_snprintf(p, end, ",\"version\":%d", a->adsb_version);
     if (trackDataValid(&a->nic_baro_valid))
@@ -3481,7 +3483,7 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     p = append_flags(p, end, a, SOURCE_TISB);
 
     p = safe_snprintf(p, end, ",\"messages\":%ld,\"seen\":%.1f,\"rssi\":%.1f}",
-            a->messages, (now - a->seen) / 1000.0,
+            a->messages, (now < a->seen) ? 0 : ((now - a->seen) / 1000.0),
             10 * log10((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
                     a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));
 
