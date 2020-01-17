@@ -106,6 +106,8 @@ static void autoset_modeac();
 static int hexDigitVal(int c);
 static void *pthreadGetaddrinfo(void *param);
 
+static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now);
+
 //
 //=========================================================================
 //
@@ -2045,101 +2047,8 @@ struct char_buffer generateAircraftJson(int globe_index){
 
 retry:
             line_start = p;
-            p = safe_snprintf(p, end, "\n    {\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-            if (a->addrtype != ADDR_ADSB_ICAO)
-                p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
-            if (trackDataValid(&a->callsign_valid)) {
-                char buf[128];
-                p = safe_snprintf(p, end, ",\"flight\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
-            }
-            if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND)
-                p = safe_snprintf(p, end, ",\"alt_baro\":\"ground\"");
-            else {
-                if (trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= 3)
-                    p = safe_snprintf(p, end, ",\"alt_baro\":%d", a->altitude_baro);
-                if (trackDataValid(&a->altitude_geom_valid))
-                    p = safe_snprintf(p, end, ",\"alt_geom\":%d", a->altitude_geom);
-            }
-            if (trackDataValid(&a->gs_valid))
-                p = safe_snprintf(p, end, ",\"gs\":%.1f", a->gs);
-            if (trackDataValid(&a->ias_valid))
-                p = safe_snprintf(p, end, ",\"ias\":%u", a->ias);
-            if (trackDataValid(&a->tas_valid))
-                p = safe_snprintf(p, end, ",\"tas\":%u", a->tas);
-            if (trackDataValid(&a->mach_valid))
-                p = safe_snprintf(p, end, ",\"mach\":%.3f", a->mach);
-            if (trackDataValid(&a->track_valid))
-                p = safe_snprintf(p, end, ",\"track\":%.1f", a->track);
-            else if (a->calc_track != 0)
-                p = safe_snprintf(p, end, ",\"calc_track\":%.1f", a->calc_track);
-            if (trackDataValid(&a->track_rate_valid))
-                p = safe_snprintf(p, end, ",\"track_rate\":%.2f", a->track_rate);
-            if (trackDataValid(&a->roll_valid))
-                p = safe_snprintf(p, end, ",\"roll\":%.1f", a->roll);
-            if (trackDataValid(&a->mag_heading_valid))
-                p = safe_snprintf(p, end, ",\"mag_heading\":%.1f", a->mag_heading);
-            if (trackDataValid(&a->true_heading_valid))
-                p = safe_snprintf(p, end, ",\"true_heading\":%.1f", a->true_heading);
-            if (trackDataValid(&a->baro_rate_valid))
-                p = safe_snprintf(p, end, ",\"baro_rate\":%d", a->baro_rate);
-            if (trackDataValid(&a->geom_rate_valid))
-                p = safe_snprintf(p, end, ",\"geom_rate\":%d", a->geom_rate);
-            if (trackDataValid(&a->squawk_valid))
-                p = safe_snprintf(p, end, ",\"squawk\":\"%04x\"", a->squawk);
-            if (trackDataValid(&a->emergency_valid))
-                p = safe_snprintf(p, end, ",\"emergency\":\"%s\"", emergency_enum_string(a->emergency));
-            if (a->category != 0)
-                p = safe_snprintf(p, end, ",\"category\":\"%02X\"", a->category);
-            if (trackDataValid(&a->nav_qnh_valid))
-                p = safe_snprintf(p, end, ",\"nav_qnh\":%.1f", a->nav_qnh);
-            if (trackDataValid(&a->nav_altitude_mcp_valid))
-                p = safe_snprintf(p, end, ",\"nav_altitude_mcp\":%d", a->nav_altitude_mcp);
-            if (trackDataValid(&a->nav_altitude_fms_valid))
-                p = safe_snprintf(p, end, ",\"nav_altitude_fms\":%d", a->nav_altitude_fms);
-            if (trackDataValid(&a->nav_heading_valid))
-                p = safe_snprintf(p, end, ",\"nav_heading\":%.1f", a->nav_heading);
-            if (trackDataValid(&a->nav_modes_valid)) {
-                p = safe_snprintf(p, end, ",\"nav_modes\":[");
-                p = append_nav_modes(p, end, a->nav_modes, "\"", ",");
-                p = safe_snprintf(p, end, "]");
-            }
-            if (trackDataValid(&a->position_valid) && (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2))
-                p = safe_snprintf(p, end, ",\"lat\":%f,\"lon\":%f,\"nic\":%u,\"rc\":%u,\"seen_pos\":%.1f", a->lat, a->lon, a->pos_nic, a->pos_rc, (now - a->position_valid.updated) / 1000.0);
-            if (a->adsb_version >= 0)
-                p = safe_snprintf(p, end, ",\"version\":%d", a->adsb_version);
-            if (trackDataValid(&a->nic_baro_valid))
-                p = safe_snprintf(p, end, ",\"nic_baro\":%u", a->nic_baro);
-            if (trackDataValid(&a->nac_p_valid))
-                p = safe_snprintf(p, end, ",\"nac_p\":%u", a->nac_p);
-            if (trackDataValid(&a->nac_v_valid))
-                p = safe_snprintf(p, end, ",\"nac_v\":%u", a->nac_v);
-            if (trackDataValid(&a->sil_valid))
-                p = safe_snprintf(p, end, ",\"sil\":%u", a->sil);
-            if (a->sil_type != SIL_INVALID)
-                p = safe_snprintf(p, end, ",\"sil_type\":\"%s\"", sil_type_enum_string(a->sil_type));
-            if (trackDataValid(&a->gva_valid))
-                p = safe_snprintf(p, end, ",\"gva\":%u", a->gva);
-            if (trackDataValid(&a->sda_valid))
-                p = safe_snprintf(p, end, ",\"sda\":%u", a->sda);
-            if (trackDataValid(&a->alert_valid))
-                p = safe_snprintf(p, end, ",\"alert\":%u", a->alert);
-            if (trackDataValid(&a->spi_valid))
-                p = safe_snprintf(p, end, ",\"spi\":%u", a->spi);
 
-            if (a->position_valid.source == SOURCE_JAERO)
-                p = safe_snprintf(p, end, ",\"jaero\": true");
-            if (a->position_valid.source == SOURCE_SBS)
-                p = safe_snprintf(p, end, ",\"sbs_other\": true");
-
-            p = safe_snprintf(p, end, ",\"mlat\":");
-            p = append_flags(p, end, a, SOURCE_MLAT);
-            p = safe_snprintf(p, end, ",\"tisb\":");
-            p = append_flags(p, end, a, SOURCE_TISB);
-
-            p = safe_snprintf(p, end, ",\"messages\":%ld,\"seen\":%.1f,\"rssi\":%.1f}",
-                    a->messages, (now - a->seen) / 1000.0,
-                    10 * log10((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
-                            a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));
+            p = sprintAircraftObject(p, end, a, now);
 
             if ((p + 100) >= end) { // +100 to leave some space for the final line
                 // overran the buffer
@@ -3477,4 +3386,104 @@ static void *pthreadGetaddrinfo(void *param) {
 
     pthread_mutex_unlock(con->mutex);
     return NULL;
+}
+
+static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now) {
+    p = safe_snprintf(p, end, "\n    {\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    if (a->addrtype != ADDR_ADSB_ICAO)
+        p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
+    if (trackDataValid(&a->callsign_valid)) {
+        char buf[128];
+        p = safe_snprintf(p, end, ",\"flight\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
+    }
+    if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND)
+        p = safe_snprintf(p, end, ",\"alt_baro\":\"ground\"");
+    else {
+        if (trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= 3)
+            p = safe_snprintf(p, end, ",\"alt_baro\":%d", a->altitude_baro);
+        if (trackDataValid(&a->altitude_geom_valid))
+            p = safe_snprintf(p, end, ",\"alt_geom\":%d", a->altitude_geom);
+    }
+    if (trackDataValid(&a->gs_valid))
+        p = safe_snprintf(p, end, ",\"gs\":%.1f", a->gs);
+    if (trackDataValid(&a->ias_valid))
+        p = safe_snprintf(p, end, ",\"ias\":%u", a->ias);
+    if (trackDataValid(&a->tas_valid))
+        p = safe_snprintf(p, end, ",\"tas\":%u", a->tas);
+    if (trackDataValid(&a->mach_valid))
+        p = safe_snprintf(p, end, ",\"mach\":%.3f", a->mach);
+    if (trackDataValid(&a->track_valid))
+        p = safe_snprintf(p, end, ",\"track\":%.1f", a->track);
+    else if (a->calc_track != 0)
+        p = safe_snprintf(p, end, ",\"calc_track\":%.1f", a->calc_track);
+    if (trackDataValid(&a->track_rate_valid))
+        p = safe_snprintf(p, end, ",\"track_rate\":%.2f", a->track_rate);
+    if (trackDataValid(&a->roll_valid))
+        p = safe_snprintf(p, end, ",\"roll\":%.1f", a->roll);
+    if (trackDataValid(&a->mag_heading_valid))
+        p = safe_snprintf(p, end, ",\"mag_heading\":%.1f", a->mag_heading);
+    if (trackDataValid(&a->true_heading_valid))
+        p = safe_snprintf(p, end, ",\"true_heading\":%.1f", a->true_heading);
+    if (trackDataValid(&a->baro_rate_valid))
+        p = safe_snprintf(p, end, ",\"baro_rate\":%d", a->baro_rate);
+    if (trackDataValid(&a->geom_rate_valid))
+        p = safe_snprintf(p, end, ",\"geom_rate\":%d", a->geom_rate);
+    if (trackDataValid(&a->squawk_valid))
+        p = safe_snprintf(p, end, ",\"squawk\":\"%04x\"", a->squawk);
+    if (trackDataValid(&a->emergency_valid))
+        p = safe_snprintf(p, end, ",\"emergency\":\"%s\"", emergency_enum_string(a->emergency));
+    if (a->category != 0)
+        p = safe_snprintf(p, end, ",\"category\":\"%02X\"", a->category);
+    if (trackDataValid(&a->nav_qnh_valid))
+        p = safe_snprintf(p, end, ",\"nav_qnh\":%.1f", a->nav_qnh);
+    if (trackDataValid(&a->nav_altitude_mcp_valid))
+        p = safe_snprintf(p, end, ",\"nav_altitude_mcp\":%d", a->nav_altitude_mcp);
+    if (trackDataValid(&a->nav_altitude_fms_valid))
+        p = safe_snprintf(p, end, ",\"nav_altitude_fms\":%d", a->nav_altitude_fms);
+    if (trackDataValid(&a->nav_heading_valid))
+        p = safe_snprintf(p, end, ",\"nav_heading\":%.1f", a->nav_heading);
+    if (trackDataValid(&a->nav_modes_valid)) {
+        p = safe_snprintf(p, end, ",\"nav_modes\":[");
+        p = append_nav_modes(p, end, a->nav_modes, "\"", ",");
+        p = safe_snprintf(p, end, "]");
+    }
+    if (trackDataValid(&a->position_valid) && (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2))
+        p = safe_snprintf(p, end, ",\"lat\":%f,\"lon\":%f,\"nic\":%u,\"rc\":%u,\"seen_pos\":%.1f", a->lat, a->lon, a->pos_nic, a->pos_rc, (now - a->position_valid.updated) / 1000.0);
+    if (a->adsb_version >= 0)
+        p = safe_snprintf(p, end, ",\"version\":%d", a->adsb_version);
+    if (trackDataValid(&a->nic_baro_valid))
+        p = safe_snprintf(p, end, ",\"nic_baro\":%u", a->nic_baro);
+    if (trackDataValid(&a->nac_p_valid))
+        p = safe_snprintf(p, end, ",\"nac_p\":%u", a->nac_p);
+    if (trackDataValid(&a->nac_v_valid))
+        p = safe_snprintf(p, end, ",\"nac_v\":%u", a->nac_v);
+    if (trackDataValid(&a->sil_valid))
+        p = safe_snprintf(p, end, ",\"sil\":%u", a->sil);
+    if (a->sil_type != SIL_INVALID)
+        p = safe_snprintf(p, end, ",\"sil_type\":\"%s\"", sil_type_enum_string(a->sil_type));
+    if (trackDataValid(&a->gva_valid))
+        p = safe_snprintf(p, end, ",\"gva\":%u", a->gva);
+    if (trackDataValid(&a->sda_valid))
+        p = safe_snprintf(p, end, ",\"sda\":%u", a->sda);
+    if (trackDataValid(&a->alert_valid))
+        p = safe_snprintf(p, end, ",\"alert\":%u", a->alert);
+    if (trackDataValid(&a->spi_valid))
+        p = safe_snprintf(p, end, ",\"spi\":%u", a->spi);
+
+    if (a->position_valid.source == SOURCE_JAERO)
+        p = safe_snprintf(p, end, ",\"jaero\": true");
+    if (a->position_valid.source == SOURCE_SBS)
+        p = safe_snprintf(p, end, ",\"sbs_other\": true");
+
+    p = safe_snprintf(p, end, ",\"mlat\":");
+    p = append_flags(p, end, a, SOURCE_MLAT);
+    p = safe_snprintf(p, end, ",\"tisb\":");
+    p = append_flags(p, end, a, SOURCE_TISB);
+
+    p = safe_snprintf(p, end, ",\"messages\":%ld,\"seen\":%.1f,\"rssi\":%.1f}",
+            a->messages, (now - a->seen) / 1000.0,
+            10 * log10((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
+                    a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));
+
+    return p;
 }
