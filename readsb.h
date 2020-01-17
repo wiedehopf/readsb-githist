@@ -356,6 +356,9 @@ struct
   struct net_writer beast_out; // Beast-format output
   struct net_writer beast_reduce_out; // Reduced data Beast-format output
   struct net_writer sbs_out; // SBS-format output
+  struct net_writer sbs_out_mlat; // SBS-format output
+  struct net_writer sbs_out_jaero; // SBS-format output
+  struct net_writer sbs_out_prio; // SBS-format output
   struct net_writer vrs_out; // SBS-format output
   struct net_writer fatsv_out; // FATSV-format output
 

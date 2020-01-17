@@ -462,6 +462,9 @@ void modesInitNet(void) {
     struct net_service *raw_in;
     struct net_service *vrs_out;
     struct net_service *sbs_out;
+    struct net_service *sbs_out_mlat;
+    struct net_service *sbs_out_jaero;
+    struct net_service *sbs_out_prio;
     struct net_service *sbs_in;
     struct net_service *sbs_in_mlat;
     struct net_service *sbs_in_jaero;
@@ -489,6 +492,24 @@ void modesInitNet(void) {
 
     sbs_out = serviceInit("Basestation TCP output", &Modes.sbs_out, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
     serviceListen(sbs_out, Modes.net_bind_address, Modes.net_output_sbs_ports);
+
+    if (strlen(Modes.net_output_sbs_ports) == 5) {
+
+        char *mlat = strdup(Modes.net_output_sbs_ports);
+        mlat[4] = '7';
+        sbs_out_mlat = serviceInit("Basestation TCP output MLAT", &Modes.sbs_out_mlat, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
+        serviceListen(sbs_out_mlat, Modes.net_bind_address, mlat);
+
+        char *prio = strdup(Modes.net_output_sbs_ports);
+        prio[4] = '8';
+        sbs_out_prio = serviceInit("Basestation TCP output PRIO", &Modes.sbs_out_prio, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
+        serviceListen(sbs_out_prio, Modes.net_bind_address, prio);
+
+        char *jaero = strdup(Modes.net_output_sbs_ports);
+        jaero[4] = '9';
+        sbs_out_jaero = serviceInit("Basestation TCP output JAERO", &Modes.sbs_out_jaero, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
+        serviceListen(sbs_out_jaero, Modes.net_bind_address, jaero);
+    }
 
     sbs_in = serviceInit("Basestation TCP input", NULL, NULL, READ_MODE_ASCII, "\n",  decodeSbsLine);
     serviceListen(sbs_in, Modes.net_bind_address, Modes.net_input_sbs_ports);
@@ -943,6 +964,36 @@ static int decodeSbsLine(struct client *c, char *line, int remote) {
         mm.source = remote - 64;
     else
         mm.source = SOURCE_SBS;
+
+    char *out = NULL;
+    size_t line_len = strlen(line);
+
+    if (mm.source == SOURCE_SBS)
+        out = prepareWrite(&Modes.sbs_out, 200);
+    if (mm.source == SOURCE_MLAT)
+        out = prepareWrite(&Modes.sbs_out_mlat, 200);
+    if (mm.source == SOURCE_JAERO)
+        out = prepareWrite(&Modes.sbs_out_jaero, 200);
+    if (mm.source == SOURCE_PRIO)
+        out = prepareWrite(&Modes.sbs_out_prio, 200);
+
+    if (out && line_len > 15 && line_len < 200) {
+        memcpy(out, line, line_len);
+        //fprintf(stderr, "%s", out);
+        out += line_len;
+        out += sprintf(out, "\r\n");
+
+
+        if (mm.source == SOURCE_SBS)
+            completeWrite(&Modes.sbs_out, out);
+        if (mm.source == SOURCE_MLAT)
+            completeWrite(&Modes.sbs_out_mlat, out);
+        if (mm.source == SOURCE_JAERO)
+            completeWrite(&Modes.sbs_out_jaero, out);
+        if (mm.source == SOURCE_PRIO)
+            completeWrite(&Modes.sbs_out_prio, out);
+    }
+
 
     // Mark messages received over the internet as remote so that we don't try to
     // pass them off as being received by this instance when forwarding them
