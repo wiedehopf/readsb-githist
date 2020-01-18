@@ -64,6 +64,8 @@
 #include <netdb.h>
 #include <poll.h>
 #include <zlib.h>
+#include <sys/sendfile.h>
+
 
 //
 // ============================= Networking =============================
@@ -2337,8 +2339,10 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
 #ifndef _WIN32
 
     char pathbuf[PATH_MAX];
+    char histPath[PATH_MAX-100];
     char tmppath[PATH_MAX];
-    int fd;
+    char tmppath2[PATH_MAX];
+    int fd, fd2, fd3;
     int len = cb.len;
     mode_t mask;
     char *content = cb.buffer;
@@ -2366,6 +2370,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
             goto error_1;
 
         gzbuffer(gzfp, 256 * 1024);
+        gzsetparams(gzfp, gzip, Z_DEFAULT_STRATEGY);
 
         if (gzwrite(gzfp, content, len) != len)
             goto error_1;
@@ -2380,6 +2385,64 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
             goto error_2;
     }
 
+    struct stat fileinfo = {0};
+
+
+    if (gzip > 7 && stat("/var/globe_history", &fileinfo) == 0) {
+
+        fd3 = open(tmppath, O_RDONLY);
+
+        snprintf(tmppath2, PATH_MAX, "/var/globe_history/XXXXXX");
+        tmppath2[PATH_MAX - 1] = 0;
+        fd2 = mkstemp(tmppath2);
+        if (fd2 < 0) {
+            goto no_copy;
+        }
+        fchmod(fd2, 0644 & ~mask);
+
+
+        fstat(fd3, &fileinfo);
+
+        off_t new_size = sendfile(fd2, fd3, NULL, fileinfo.st_size);
+        if (close(fd2) < 0 || close(fd3) < 0) {
+            goto no_copy;
+        }
+
+        char tstring[100];
+        time_t now = time(NULL);
+        strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
+
+        snprintf(histPath, PATH_MAX - 100, "%s/%s", "/var/globe_history/", tstring);
+        histPath[PATH_MAX - 101] = 0;
+
+        if (stat(histPath, &fileinfo) == -1) {
+            mkdir(histPath, 0755);
+
+            char pathbuf[PATH_MAX];
+            snprintf(pathbuf, PATH_MAX, "%s/traces", histPath);
+            histPath[PATH_MAX - 101] = 0;
+            mkdir(pathbuf, 0755);
+            for (int i = 0; i < 256; i++) {
+                snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", histPath, i);
+                mkdir(pathbuf, 0755);
+            }
+        }
+
+        snprintf(histPath, PATH_MAX - 100, "%s/%s/%s", "/var/globe_history/", tstring, file);
+        histPath[PATH_MAX - 101] = 0;
+
+
+        //fprintf(stderr, "%lu %s\n", new_size, tmppath2);
+        if (stat(histPath, &fileinfo) || new_size > fileinfo.st_size) {
+            if (rename(tmppath2, histPath)) {
+                unlink(tmppath2);
+            }
+        } else {
+            unlink(tmppath2);
+        }
+    }
+
+no_copy:
     snprintf(pathbuf, PATH_MAX, "%s/%s", Modes.json_dir, file);
     pathbuf[PATH_MAX - 1] = 0;
     rename(tmppath, pathbuf);
@@ -2399,8 +2462,8 @@ void writeJsonToFile (const char *file, struct char_buffer cb) {
     writeJsonTo(file, cb, 0);
 }
 
-void writeJsonToGzip (const char *file, struct char_buffer cb) {
-    writeJsonTo(file, cb, 1);
+void writeJsonToGzip (const char *file, struct char_buffer cb, int gzip) {
+    writeJsonTo(file, cb, gzip);
 }
 
 static void periodicReadFromClient(struct client *c) {
