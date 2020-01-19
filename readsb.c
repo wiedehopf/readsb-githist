@@ -941,6 +941,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
         case OptJsonDir:
             Modes.json_dir = strdup(arg);
             break;
+        case OptGlobeHistoryDir:
+            Modes.globe_history_dir = strdup(arg);
+            break;
         case OptJsonTime:
             Modes.json_interval = (uint64_t) (1000 * atof(arg));
             if (Modes.json_interval < 100) // 0.1s

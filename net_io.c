@@ -2387,15 +2387,18 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
 
     struct stat fileinfo = {0};
 
-
-    if (gzip > 7 && stat("/var/globe_history", &fileinfo) == 0) {
+    if (gzip > 7 && Modes.globe_history_dir) {
+        if (stat(Modes.globe_history_dir, &fileinfo) == -1) {
+            mkdir(Modes.globe_history_dir, 0755);
+        }
 
         fd3 = open(tmppath, O_RDONLY);
 
-        snprintf(tmppath2, PATH_MAX, "/var/globe_history/XXXXXX");
+        snprintf(tmppath2, PATH_MAX, "%s/XXXXXX", Modes.globe_history_dir);
         tmppath2[PATH_MAX - 1] = 0;
         fd2 = mkstemp(tmppath2);
         if (fd2 < 0) {
+            close(fd3);
             goto no_copy;
         }
         fchmod(fd2, 0644 & ~mask);
@@ -2412,7 +2415,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
         time_t now = time(NULL);
         strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
 
-        snprintf(histPath, PATH_MAX - 100, "%s/%s", "/var/globe_history/", tstring);
+        snprintf(histPath, PATH_MAX - 100, "%s/%s", Modes.globe_history_dir, tstring);
         histPath[PATH_MAX - 101] = 0;
 
         if (stat(histPath, &fileinfo) == -1) {
@@ -2428,7 +2431,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
             }
         }
 
-        snprintf(histPath, PATH_MAX - 100, "%s/%s/%s", "/var/globe_history/", tstring, file);
+        snprintf(histPath, PATH_MAX - 100, "%s/%s/%s", Modes.globe_history_dir, tstring, file);
         histPath[PATH_MAX - 101] = 0;
 
 
