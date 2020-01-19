@@ -335,8 +335,7 @@ static void *jsonThreadEntryPoint(void *arg) {
         uint64_t now = mstime();
         writeJsonToFile("aircraft.json", generateAircraftJson(-1));
 
-        // disable history
-        if (0 && !Modes.json_globe_index && now >= next_history) {
+        if (ALL_JSON && (ALL_JSON || !Modes.json_globe_index) && now >= next_history) {
             char filebuf[PATH_MAX];
 
             snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
@@ -1192,7 +1191,7 @@ int main(int argc, char **argv) {
 
     if (Modes.json_dir) {
 
-        if (!Modes.json_globe_index)
+        if (ALL_JSON || !Modes.json_globe_index)
             pthread_create(&Modes.jsonThread, NULL, jsonThreadEntryPoint, NULL);
 
         if (Modes.json_globe_index) {
@@ -1215,7 +1214,7 @@ int main(int argc, char **argv) {
 
     if (Modes.json_dir) {
 
-        if (!Modes.json_globe_index)
+        if (ALL_JSON || !Modes.json_globe_index)
             pthread_join(Modes.jsonThread, NULL); // Wait on json writer thread exit
 
         if (Modes.json_globe_index) {

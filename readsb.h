@@ -54,6 +54,8 @@
 #ifndef __DUMP1090_H
 #define __DUMP1090_H
 
+#define ALL_JSON 0
+
 // Default version number, if not overriden by the Makefile
 #ifndef MODES_READSB_VERSION
 #define MODES_READSB_VERSION     "Unknown"
