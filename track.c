@@ -1641,20 +1641,26 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         a->globe_index = globe_index(new_lat, new_lon);
         if (!a->trace) {
-            a->trace = malloc(GLOBE_TRACE_SIZE * sizeof(struct state));
+            a->trace_alloc = GLOBE_TRACE_SIZE / 128;
+            a->trace = malloc(a->trace_alloc * sizeof(struct state));
             a->trace->timestamp = now;
-            a->trace_len_last_full_write = -10000;
+            a->trace_full_write_ts = 0; // rewrite full history file
+        }
+
+        if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
+            a->trace_alloc *= 2;
+            a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
         }
 
         struct state *trace = a->trace;
-        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 900) * 1000) {
-            int new_start = GLOBE_TRACE_SIZE / 32;
+        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 1200) * 1000) {
+            int new_start;
 
             if (a->trace_len < GLOBE_TRACE_SIZE) {
                 int found = 0;
                 for (int i = 0; i < a->trace_len; i++) {
                     struct state *state = &a->trace[i];
-                    if (now < state->timestamp + 24 * 3600 * 1000) {
+                    if (now < state->timestamp + (24 * 3600 + 360) * 1000) {
                         new_start = i;
                         found = 1;
                         break;
@@ -1663,12 +1669,20 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
                 if (!found)
                     new_start = a->trace_len;
             }
+            if (a->trace_len == GLOBE_TRACE_SIZE) {
+                new_start = GLOBE_TRACE_SIZE / 64;
+            }
 
             pthread_mutex_lock(a->trace_mutex);
             a->trace_len -= new_start;
             memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
-            a->trace_len_last_full_write = -10000;
+            a->trace_full_write_ts = 0; // rewrite full history file
             pthread_mutex_unlock(a->trace_mutex);
+        }
+
+        if (a->trace_len < a->trace_alloc / 4 && a->trace_alloc > GLOBE_TRACE_SIZE / 128) {
+            a->trace_alloc /= 2;
+            a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
         }
 
         struct state *new = &(trace[a->trace_len]);

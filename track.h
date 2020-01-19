@@ -110,6 +110,7 @@ struct aircraft
 {
   struct aircraft * volatile next; // Next aircraft in our linked list (pointer is volatile)
   uint32_t addr; // ICAO address
+  pthread_mutex_t *mutex;
   addrtype_t addrtype; // highest priority address type seen for this aircraft
   uint64_t seen; // Time (millis) at which the last packet was received
   uint64_t seen_pos; // Time (millis) at which the last position was received
@@ -118,13 +119,13 @@ struct aircraft
   double signalLevel[8]; // Last 8 Signal Amplitudes
   long messages; // Number of Mode S messages received
   struct state *trace; // array of positions representing the aircrafts trace/trail
-  int32_t trace_len; // current number of points in the trace
-  int32_t trace_len_last_write; // number of points in the trace at time of last write
-  int32_t trace_len_last_full_write;
+  int trace_len; // current number of points in the trace
+  int trace_len_last_write; // number of points in the trace at time of last write
+  int trace_len_last_full_write;
+  int trace_alloc; // current number of allocated points
   uint64_t trace_full_write_ts;
   double trace_llat; // last saved lat
   double trace_llon; // last saved lon
-  pthread_mutex_t *mutex;
   pthread_mutex_t *trace_mutex;
   int destroy; // aircraft is being deleted
   int signalNext; // next index of signalLevel to use
