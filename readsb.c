@@ -1168,6 +1168,8 @@ int main(int argc, char **argv) {
 #endif
 
     // Initialization
+    //fprintf(stderr, "%lu\n", sizeof(struct aircraft) - sizeof(struct modesMessage));
+    //fprintf(stderr, "%lu\n", sizeof(pthread_mutex_t));
     log_with_timestamp("%s %s starting up.", MODES_READSB_VARIANT, MODES_READSB_VERSION);
     modesInit();
 

@@ -101,9 +101,6 @@ static void send_raw_heartbeat(struct net_service *service);
 static void send_beast_heartbeat(struct net_service *service);
 static void send_sbs_heartbeat(struct net_service *service);
 
-static void writeFATSVEvent(struct modesMessage *mm, struct aircraft *a);
-static void writeFATSVPositionUpdate(float lat, float lon, float alt);
-
 static void autoset_modeac();
 static int hexDigitVal(int c);
 static void *pthreadGetaddrinfo(void *param);
@@ -451,10 +448,6 @@ void serviceListen(struct net_service *service, char *bind_addr, char *bind_port
 
 struct net_service *makeBeastInputService(void) {
     return serviceInit("Beast TCP input", NULL, NULL, READ_MODE_BEAST, NULL, decodeBinMessage);
-}
-
-struct net_service *makeFatsvOutputService(void) {
-    return serviceInit("FATSV TCP output", &Modes.fatsv_out, NULL, READ_MODE_IGNORE, NULL, NULL);
 }
 
 void modesInitNet(void) {
@@ -1371,10 +1364,6 @@ void modesQueueOutput(struct modesMessage *mm, struct aircraft *a) {
             modesSendBeastOutput(mm, &Modes.beast_reduce_out);
         }
     }
-
-    if (a && !is_mlat) {
-        writeFATSVEvent(mm, a);
-    }
 }
 
 // Decode a little-endian IEEE754 float (binary32)
@@ -1416,8 +1405,6 @@ static void handle_radarcape_position(float lat, float lon, float alt) {
 	return;
     if (!isfinite(lat) || lat < -90 || lat > 90 || !isfinite(lon) || lon < -180 || lon > 180 || !isfinite(alt))
         return;
-
-    writeFATSVPositionUpdate(lat, lon, alt);
 
     if (!(Modes.bUserFlags & MODES_USER_LATLON_VALID)) {
         Modes.fUserLat = lat;
@@ -1772,10 +1759,12 @@ static int decodeHexMessage(struct client *c, char *hex, int remote) {
     return (0);
 }
 
+/*
 __attribute__ ((format(printf, 3, 0))) static char *safe_vsnprintf(char *p, char *end, const char *format, va_list ap) {
     p += vsnprintf(p < end ? p : NULL, p < end ? (size_t) (end - p) : 0, format, ap);
     return p;
 }
+*/
 
 __attribute__ ((format(printf, 3, 4))) static char *safe_snprintf(char *p, char *end, const char *format, ...) {
     va_list ap;
@@ -1907,7 +1896,7 @@ static char *append_nav_modes(char *p, char *end, nav_modes_t flags, const char 
     return p;
 }
 
-static const char *nav_modes_flags_string(nav_modes_t flags) {
+const char *nav_modes_flags_string(nav_modes_t flags) {
     static char buf[256];
     buf[0] = 0;
     append_nav_modes(buf, buf + sizeof (buf), flags, "", " ");
@@ -1959,7 +1948,7 @@ static const char *sil_type_enum_string(sil_type_t type) {
     }
 }
 
-static const char *nav_altitude_source_enum_string(nav_altitude_source_t src) {
+const char *nav_altitude_source_enum_string(nav_altitude_source_t src) {
     switch (src) {
         case NAV_ALT_INVALID: return "invalid";
         case NAV_ALT_UNKNOWN: return "unknown";
@@ -2709,134 +2698,6 @@ static void modesReadFromClient(struct client *c) {
     }
 }
 
-__attribute__ ((format(printf, 4, 5))) static char *appendFATSV(char *p, char *end, const char *field, const char *format, ...) {
-    va_list ap;
-    va_start(ap, format);
-
-    p = safe_snprintf(p, end, "%s\t", field);
-    p = safe_vsnprintf(p, end, format, ap);
-    p = safe_snprintf(p, end, "\t");
-
-    va_end(ap);
-    return p;
-}
-
-#define TSV_MAX_PACKET_SIZE 800
-#define TSV_VERSION "6E"
-
-static void writeFATSVPositionUpdate(float lat, float lon, float alt) {
-    static float last_lat, last_lon, last_alt;
-
-    if (lat == last_lat && lon == last_lon && alt == last_alt)
-        return;
-
-    last_lat = lat;
-    last_lon = lon;
-    last_alt = alt;
-
-    char *p = prepareWrite(&Modes.fatsv_out, TSV_MAX_PACKET_SIZE);
-    if (!p)
-        return;
-
-    char *end = p + TSV_MAX_PACKET_SIZE;
-
-    p = appendFATSV(p, end, "_v",     "%s", TSV_VERSION);
-    p = appendFATSV(p, end, "clock", "%" PRIu64, messageNow() / 1000);
-    p = appendFATSV(p, end, "type", "%s", "location_update");
-    p = appendFATSV(p, end, "lat", "%.5f", lat);
-    p = appendFATSV(p, end, "lon", "%.5f", lon);
-    p = appendFATSV(p, end, "alt", "%.0f", alt);
-    p = appendFATSV(p, end, "altref", "%s", "egm96_meters");
-    --p; // remove last tab
-    p = safe_snprintf(p, end, "\n");
-
-    if (p < end)
-        completeWrite(&Modes.fatsv_out, p);
-    else
-        fprintf(stderr, "fatsv: output too large (max %d, overran by %d)\n", TSV_MAX_PACKET_SIZE, (int) (p - end));
-}
-
-static void writeFATSVEventMessage(struct modesMessage *mm, const char *datafield, unsigned char *data, size_t len) {
-    char *p = prepareWrite(&Modes.fatsv_out, TSV_MAX_PACKET_SIZE);
-    if (!p)
-        return;
-
-    char *end = p + TSV_MAX_PACKET_SIZE;
-
-    p = appendFATSV(p, end, "_v",    "%s", TSV_VERSION);
-    p = appendFATSV(p, end, "clock", "%" PRIu64, messageNow() / 1000);
-    p = appendFATSV(p, end, (mm->addr & MODES_NON_ICAO_ADDRESS) ? "otherid" : "hexid", "%06X", mm->addr & 0xFFFFFF);
-    if (mm->addrtype != ADDR_ADSB_ICAO) {
-        p = appendFATSV(p, end, "addrtype", "%s", addrtype_enum_string(mm->addrtype));
-    }
-
-    p = safe_snprintf(p, end, "%s\t", datafield);
-    for (size_t i = 0; i < len; ++i) {
-        p = safe_snprintf(p, end, "%02X", data[i]);
-    }
-    p = safe_snprintf(p, end, "\n");
-
-    if (p <= end)
-        completeWrite(&Modes.fatsv_out, p);
-    else
-        fprintf(stderr, "fatsv: output too large (max %d, overran by %d)\n", TSV_MAX_PACKET_SIZE, (int) (p - end));
-#undef bufsize
-}
-
-static void writeFATSVEvent(struct modesMessage *mm, struct aircraft *a) {
-    // Write event records for a couple of message types.
-
-    if (!Modes.fatsv_out.service || !Modes.fatsv_out.service->connections) {
-        return; // not enabled or no active connections
-    }
-
-    if (a->messages < 2) // basic filter for bad decodes
-        return;
-
-    switch (mm->msgtype) {
-        case 20:
-        case 21:
-            // DF 20/21: Comm-B: emit if they've changed since we last sent them
-            switch (mm->commb_format) {
-                case COMMB_DATALINK_CAPS:
-                    // BDS 1,0: data link capability report
-                    if (memcmp(mm->MB, a->fatsv_emitted_bds_10, 7) != 0) {
-                        memcpy(a->fatsv_emitted_bds_10, mm->MB, 7);
-                        writeFATSVEventMessage(mm, "datalink_caps", mm->MB, 7);
-                    }
-                    break;
-
-                case COMMB_ACAS_RA:
-                    // BDS 3,0: ACAS RA report
-                    if (memcmp(mm->MB, a->fatsv_emitted_bds_30, 7) != 0) {
-                        memcpy(a->fatsv_emitted_bds_30, mm->MB, 7);
-                        writeFATSVEventMessage(mm, "commb_acas_ra", mm->MB, 7);
-                    }
-                    break;
-
-                default:
-                    // nothing
-                    break;
-            }
-            break;
-
-        case 17:
-        case 18:
-            // DF 17/18: extended squitter
-            if (mm->metype == 28 && mm->mesub == 2 && memcmp(mm->ME, &a->fatsv_emitted_es_acas_ra, 7) != 0) {
-                // type 28 subtype 2: ACAS RA report
-                // first byte has the type/subtype, remaining bytes match the BDS 3,0 format
-                memcpy(a->fatsv_emitted_es_acas_ra, mm->ME, 7);
-                writeFATSVEventMessage(mm, "es_acas_ra", mm->ME, 7);
-            } else if (mm->metype == 31 && (mm->mesub == 0 || mm->mesub == 1) && memcmp(mm->ME, a->fatsv_emitted_es_status, 7) != 0) {
-                // aircraft operational status
-                memcpy(a->fatsv_emitted_es_status, mm->ME, 7);
-                writeFATSVEventMessage(mm, "es_op_status", mm->ME, 7);
-            }
-            break;
-    }
-}
-
 static inline unsigned unsigned_difference(unsigned v1, unsigned v2) {
     return (v1 > v2) ? (v1 - v2) : (v2 - v1);
 }
@@ -2846,62 +2707,7 @@ static inline float heading_difference(float h1, float h2) {
     return (d < 180) ? d : (360 - d);
 }
 
-__attribute__ ((format(printf, 6, 7))) static char *appendFATSVMeta(char *p, char *end, const char *field, struct aircraft *a, const data_validity *source, const char *format, ...) {
-    const char *sourcetype;
-    switch (source->source) {
-        case SOURCE_MODE_S:
-            sourcetype = "U";
-            break;
-        case SOURCE_MODE_S_CHECKED:
-            sourcetype = "S";
-            break;
-        case SOURCE_TISB:
-            sourcetype = "T";
-            break;
-        case SOURCE_ADSR:
-            sourcetype = "R";
-            break;
-        case SOURCE_ADSB:
-            sourcetype = "A";
-            break;
-        default:
-            // don't want to forward data sourced from these
-            return p;
-    }
-
-    if (!trackDataValid(source)) {
-        // expired data
-        return p;
-    }
-
-    if (source->updated > messageNow()) {
-        // data in the future
-        return p;
-    }
-
-    if (source->updated < a->fatsv_last_emitted) {
-        // not updated since last time
-        return p;
-    }
-
-    uint64_t age = (messageNow() - source->updated) / 1000;
-    if (age > 255) {
-        // too old
-        return p;
-    }
-
-    p = safe_snprintf(p, end, "%s\t", field);
-
-    va_list ap;
-    va_start(ap, format);
-    p = safe_vsnprintf(p, end, format, ap);
-    va_end(ap);
-
-    p = safe_snprintf(p, end, " %" PRIu64 " %s\t", age, sourcetype);
-    return p;
-}
-
-static const char *airground_enum_string(airground_t ag) {
+const char *airground_enum_string(airground_t ag) {
     switch (ag) {
         case AG_AIRBORNE:
             return "A+";
@@ -2909,233 +2715,6 @@ static const char *airground_enum_string(airground_t ag) {
             return "G+";
         default:
             return "?";
-    }
-}
-
-static void writeFATSV() {
-    struct aircraft *a;
-    static uint64_t next_update;
-
-    if (!Modes.fatsv_out.service || !Modes.fatsv_out.service->connections) {
-        return; // not enabled or no active connections
-    }
-
-    uint64_t now = mstime();
-    if (now < next_update) {
-        return;
-    }
-
-    // scan once a second at most
-    next_update = now + 1000;
-
-    for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
-        for (a = Modes.aircrafts[j]; a; a = a->next) {
-            if (a->messages < 2) // basic filter for bad decodes
-                continue;
-
-            // don't emit if it hasn't updated since last time
-            if (a->seen < a->fatsv_last_emitted) {
-                continue;
-            }
-
-            // Pretend we are "processing a message" so the validity checks work as expected
-            _messageNow = a->seen;
-
-            // some special cases:
-            int altValid = trackDataValid(&a->altitude_baro_valid);
-            int airgroundValid = trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED; // for non-ADS-B transponders, only trust DF11 CA field
-            int gsValid = trackDataValid(&a->gs_valid);
-            int squawkValid = trackDataValid(&a->squawk_valid);
-            int callsignValid = trackDataValid(&a->callsign_valid) && strcmp(a->callsign, "        ") != 0;
-            int positionValid = trackDataValid(&a->position_valid);
-
-            // If we are definitely on the ground, suppress any unreliable altitude info.
-            // When on the ground, ADS-B transponders don't emit an ADS-B message that includes
-            // altitude, so a corrupted Mode S altitude response from some other in-the-air AC
-            // might be taken as the "best available altitude" and produce e.g. "airGround G+ alt 31000".
-            if (airgroundValid && a->airground == AG_GROUND && a->altitude_baro_valid.source < SOURCE_MODE_S_CHECKED)
-                altValid = 0;
-
-            // if it hasn't changed altitude, heading, or speed much,
-            // don't update so often
-            int changed =
-                (altValid && abs(a->altitude_baro - a->fatsv_emitted_altitude_baro) >= 50) ||
-                (trackDataValid(&a->altitude_geom_valid) && abs(a->altitude_geom - a->fatsv_emitted_altitude_geom) >= 50) ||
-                (trackDataValid(&a->baro_rate_valid) && abs(a->baro_rate - a->fatsv_emitted_baro_rate) > 500) ||
-                (trackDataValid(&a->geom_rate_valid) && abs(a->geom_rate - a->fatsv_emitted_geom_rate) > 500) ||
-                (trackDataValid(&a->track_valid) && heading_difference(a->track, a->fatsv_emitted_track) >= 2) ||
-                (trackDataValid(&a->track_rate_valid) && fabs(a->track_rate - a->fatsv_emitted_track_rate) >= 0.5) ||
-                (trackDataValid(&a->roll_valid) && fabs(a->roll - a->fatsv_emitted_roll) >= 5.0) ||
-                (trackDataValid(&a->mag_heading_valid) && heading_difference(a->mag_heading, a->fatsv_emitted_mag_heading) >= 2) ||
-                (trackDataValid(&a->true_heading_valid) && heading_difference(a->true_heading, a->fatsv_emitted_true_heading) >= 2) ||
-                (gsValid && fabs(a->gs - a->fatsv_emitted_gs) >= 25) ||
-                (trackDataValid(&a->ias_valid) && unsigned_difference(a->ias, a->fatsv_emitted_ias) >= 25) ||
-                (trackDataValid(&a->tas_valid) && unsigned_difference(a->tas, a->fatsv_emitted_tas) >= 25) ||
-                (trackDataValid(&a->mach_valid) && fabs(a->mach - a->fatsv_emitted_mach) >= 0.02);
-
-            int immediate =
-                (trackDataValid(&a->nav_altitude_mcp_valid) && unsigned_difference(a->nav_altitude_mcp, a->fatsv_emitted_nav_altitude_mcp) > 50) ||
-                (trackDataValid(&a->nav_altitude_fms_valid) && unsigned_difference(a->nav_altitude_fms, a->fatsv_emitted_nav_altitude_fms) > 50) ||
-                (trackDataValid(&a->nav_altitude_src_valid) && a->nav_altitude_src != a->fatsv_emitted_nav_altitude_src) ||
-                (trackDataValid(&a->nav_heading_valid) && heading_difference(a->nav_heading, a->fatsv_emitted_nav_heading) > 2) ||
-                (trackDataValid(&a->nav_modes_valid) && a->nav_modes != a->fatsv_emitted_nav_modes) ||
-                (trackDataValid(&a->nav_qnh_valid) && fabs(a->nav_qnh - a->fatsv_emitted_nav_qnh) > 0.8) || // 0.8 is the ES message resolution
-                (callsignValid && strcmp(a->callsign, a->fatsv_emitted_callsign) != 0) ||
-                (airgroundValid && a->airground == AG_AIRBORNE && a->fatsv_emitted_airground == AG_GROUND) ||
-                (airgroundValid && a->airground == AG_GROUND && a->fatsv_emitted_airground == AG_AIRBORNE) ||
-                (squawkValid && a->squawk != a->fatsv_emitted_squawk) ||
-                (trackDataValid(&a->emergency_valid) && a->emergency != a->fatsv_emitted_emergency);
-
-            uint64_t minAge;
-            if (immediate) {
-                // a change we want to emit right away
-                minAge = 0;
-            } else if (!positionValid) {
-                // don't send mode S very often
-                minAge = 30000;
-            } else if ((airgroundValid && a->airground == AG_GROUND) ||
-                    (altValid && a->altitude_baro < 500 && (!gsValid || a->gs < 200)) ||
-                    (gsValid && a->gs < 100 && (!altValid || a->altitude_baro < 1000))) {
-                // we are probably on the ground, increase the update rate
-                minAge = 1000;
-            } else if (!altValid || a->altitude_baro < 10000) {
-                // Below 10000 feet, emit up to every 5s when changing, 10s otherwise
-                minAge = (changed ? 5000 : 10000);
-            } else {
-                // Above 10000 feet, emit up to every 10s when changing, 30s otherwise
-                minAge = (changed ? 10000 : 30000);
-            }
-
-            if ((now - a->fatsv_last_emitted) < minAge)
-                continue;
-
-            char *p = prepareWrite(&Modes.fatsv_out, TSV_MAX_PACKET_SIZE);
-            if (!p)
-                return;
-            char *end = p + TSV_MAX_PACKET_SIZE;
-
-            p = appendFATSV(p, end, "_v",    "%s", TSV_VERSION);
-            p = appendFATSV(p, end, "clock", "%" PRIu64, messageNow() / 1000);
-            p = appendFATSV(p, end, (a->addr & MODES_NON_ICAO_ADDRESS) ? "otherid" : "hexid", "%06X", a->addr & 0xFFFFFF);
-
-            // for fields we only emit on change,
-            // occasionally re-emit them all
-            int forceEmit = (now - a->fatsv_last_force_emit) > 600000;
-
-            // these don't change often / at all, only emit when they change
-            if (forceEmit || a->addrtype != a->fatsv_emitted_addrtype) {
-                p = appendFATSV(p, end, "addrtype", "%s", addrtype_enum_string(a->addrtype));
-            }
-            if (forceEmit || a->adsb_version != a->fatsv_emitted_adsb_version) {
-                p = appendFATSV(p, end, "adsb_version", "%d", a->adsb_version);
-            }
-            if (forceEmit || a->category != a->fatsv_emitted_category) {
-                p = appendFATSV(p, end, "category", "%02X", a->category);
-            }
-            if (trackDataValid(&a->nac_p_valid) && (forceEmit || a->nac_p != a->fatsv_emitted_nac_p)) {
-                p = appendFATSVMeta(p, end, "nac_p", a, &a->nac_p_valid, "%u", a->nac_p);
-            }
-            if (trackDataValid(&a->nac_v_valid) && (forceEmit || a->nac_v != a->fatsv_emitted_nac_v)) {
-                p = appendFATSVMeta(p, end, "nac_v", a, &a->nac_v_valid, "%u", a->nac_v);
-            }
-            if (trackDataValid(&a->sil_valid) && (forceEmit || a->sil != a->fatsv_emitted_sil)) {
-                p = appendFATSVMeta(p, end, "sil", a, &a->sil_valid, "%u", a->sil);
-            }
-            if (trackDataValid(&a->sil_valid) && (forceEmit || a->sil_type != a->fatsv_emitted_sil_type)) {
-                p = appendFATSVMeta(p, end, "sil_type", a, &a->sil_valid, "%s", sil_type_enum_string(a->sil_type));
-            }
-            if (trackDataValid(&a->nic_baro_valid) && (forceEmit || a->nic_baro != a->fatsv_emitted_nic_baro)) {
-                p = appendFATSVMeta(p, end, "nic_baro", a, &a->nic_baro_valid, "%u", a->nic_baro);
-            }
-
-            // only emit alt, speed, latlon, track etc if they have been received since the last time
-            // and are not stale
-
-            char *dataStart = p;
-
-            // special cases
-            if (airgroundValid)
-                p = appendFATSVMeta(p, end, "airGround", a, &a->airground_valid, "%s", airground_enum_string(a->airground));
-            if (squawkValid)
-                p = appendFATSVMeta(p, end, "squawk", a, &a->squawk_valid, "%04x", a->squawk);
-            if (callsignValid)
-                p = appendFATSVMeta(p, end, "ident", a, &a->callsign_valid, "{%s}", a->callsign);
-            if (altValid)
-                p = appendFATSVMeta(p, end, "alt", a, &a->altitude_baro_valid, "%d", a->altitude_baro);
-            if (positionValid) {
-                p = appendFATSVMeta(p, end, "position", a, &a->position_valid, "{%.5f %.5f %u %u}", a->lat, a->lon, a->pos_nic, a->pos_rc);
-            }
-
-            p = appendFATSVMeta(p, end, "alt_gnss", a, &a->altitude_geom_valid, "%d", a->altitude_geom);
-            p = appendFATSVMeta(p, end, "vrate", a, &a->baro_rate_valid, "%d", a->baro_rate);
-            p = appendFATSVMeta(p, end, "vrate_geom", a, &a->geom_rate_valid, "%d", a->geom_rate);
-            p = appendFATSVMeta(p, end, "speed", a, &a->gs_valid, "%.1f", a->gs);
-            p = appendFATSVMeta(p, end, "speed_ias", a, &a->ias_valid, "%u", a->ias);
-            p = appendFATSVMeta(p, end, "speed_tas", a, &a->tas_valid, "%u", a->tas);
-            p = appendFATSVMeta(p, end, "mach", a, &a->mach_valid, "%.3f", a->mach);
-            p = appendFATSVMeta(p, end, "track", a, &a->track_valid, "%.1f", a->track);
-            p = appendFATSVMeta(p, end, "track_rate", a, &a->track_rate_valid, "%.2f", a->track_rate);
-            p = appendFATSVMeta(p, end, "roll", a, &a->roll_valid, "%.1f", a->roll);
-            p = appendFATSVMeta(p, end, "heading_magnetic", a, &a->mag_heading_valid, "%.1f", a->mag_heading);
-            p = appendFATSVMeta(p, end, "heading_true", a, &a->true_heading_valid,    "%.1f", a->true_heading);
-            p = appendFATSVMeta(p, end, "nav_alt_mcp", a, &a->nav_altitude_mcp_valid, "%u",   a->nav_altitude_mcp);
-            p = appendFATSVMeta(p, end, "nav_alt_fms", a, &a->nav_altitude_fms_valid, "%u",   a->nav_altitude_fms);
-            p = appendFATSVMeta(p, end, "nav_alt_src", a, &a->nav_altitude_src_valid, "%s", nav_altitude_source_enum_string(a->nav_altitude_src));
-            p = appendFATSVMeta(p, end, "nav_heading", a, &a->nav_heading_valid, "%.1f", a->nav_heading);
-            p = appendFATSVMeta(p, end, "nav_modes", a, &a->nav_modes_valid, "{%s}", nav_modes_flags_string(a->nav_modes));
-            p = appendFATSVMeta(p, end, "nav_qnh", a, &a->nav_qnh_valid, "%.1f", a->nav_qnh);
-            p = appendFATSVMeta(p, end, "emergency", a, &a->emergency_valid, "%s", emergency_enum_string(a->emergency));
-
-            // if we didn't get anything interesting, bail out.
-            // We don't need to do anything special to unwind prepareWrite().
-            if (p == dataStart) {
-                continue;
-            }
-
-            --p; // remove last tab
-            p = safe_snprintf(p, end, "\n");
-
-            if (p < end)
-                completeWrite(&Modes.fatsv_out, p);
-            else
-                fprintf(stderr, "fatsv: output too large (max %d, overran by %d)\n", TSV_MAX_PACKET_SIZE, (int) (p - end));
-
-            a->fatsv_emitted_altitude_baro = a->altitude_baro;
-            a->fatsv_emitted_altitude_geom = a->altitude_geom;
-            a->fatsv_emitted_baro_rate = a->baro_rate;
-            a->fatsv_emitted_geom_rate = a->geom_rate;
-            a->fatsv_emitted_gs = a->gs;
-            a->fatsv_emitted_ias = a->ias;
-            a->fatsv_emitted_tas = a->tas;
-            a->fatsv_emitted_mach = a->mach;
-            a->fatsv_emitted_track = a->track;
-            a->fatsv_emitted_track_rate = a->track_rate;
-            a->fatsv_emitted_roll = a->roll;
-            a->fatsv_emitted_mag_heading = a->mag_heading;
-            a->fatsv_emitted_true_heading = a->true_heading;
-            a->fatsv_emitted_airground = a->airground;
-            a->fatsv_emitted_nav_altitude_mcp = a->nav_altitude_mcp;
-            a->fatsv_emitted_nav_altitude_fms = a->nav_altitude_fms;
-            a->fatsv_emitted_nav_altitude_src = a->nav_altitude_src;
-            a->fatsv_emitted_nav_heading = a->nav_heading;
-            a->fatsv_emitted_nav_modes = a->nav_modes;
-            a->fatsv_emitted_nav_qnh = a->nav_qnh;
-            memcpy(a->fatsv_emitted_callsign, a->callsign, sizeof (a->fatsv_emitted_callsign));
-            a->fatsv_emitted_addrtype = a->addrtype;
-            a->fatsv_emitted_adsb_version = a->adsb_version;
-            a->fatsv_emitted_category = a->category;
-            a->fatsv_emitted_squawk = a->squawk;
-            a->fatsv_emitted_nac_p = a->nac_p;
-            a->fatsv_emitted_nac_v = a->nac_v;
-            a->fatsv_emitted_sil = a->sil;
-            a->fatsv_emitted_sil_type = a->sil_type;
-            a->fatsv_emitted_nic_baro = a->nic_baro;
-            a->fatsv_emitted_emergency = a->emergency;
-            a->fatsv_last_emitted = now;
-            if (forceEmit) {
-                a->fatsv_last_force_emit = now;
-            }
-        }
     }
 }
 
@@ -3175,9 +2754,6 @@ void modesNetPeriodicWork(void) {
     if (need_flush) {
         flushClients();
     }
-
-    // Generate FATSV output
-    writeFATSV();
 
     // supply JSON to vrs_out writer
     if (Modes.vrs_out.service && Modes.vrs_out.service->connections && now >= next_tcp_json) {
@@ -3243,8 +2819,6 @@ void modesReadSerialClient(void) {
         if (c->service->read_handler && c->service->serial_service)
             modesReadFromClient(c);
     }
-    // Generate FATSV output
-    writeFATSV();
 }
 
 void writeJsonToNet(struct net_writer *writer, struct char_buffer cb) {

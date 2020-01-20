@@ -73,7 +73,7 @@ static void position_bad(struct aircraft *a);
 
 static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     static struct aircraft zeroAircraft;
-    struct aircraft *a = (struct aircraft *) malloc(sizeof (*a));
+    struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof (*a));
     int i;
 
     // Default everything to zero/NULL
@@ -90,18 +90,6 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     a->adsb_version = -1;
     a->adsb_hrd = HEADING_MAGNETIC;
     a->adsb_tah = HEADING_GROUND_TRACK;
-
-    // prime FATSV defaults we only emit on change
-
-    // start off with the "last emitted" ACAS RA being blank (just the BDS 3,0
-    // or ES type code)
-    a->fatsv_emitted_bds_30[0] = 0x30;
-    a->fatsv_emitted_es_acas_ra[0] = 0xE2;
-    a->fatsv_emitted_adsb_version = -1;
-    a->fatsv_emitted_addrtype = ADDR_UNKNOWN;
-
-    // don't immediately emit, let some data build up
-    a->fatsv_last_emitted = a->fatsv_last_force_emit = messageNow();
 
     // Copy the first message so we can emit it later when a second message arrives.
     a->first_message = *mm;

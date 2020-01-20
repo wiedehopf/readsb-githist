@@ -161,4 +161,9 @@ void writeJsonToGzip (const char *file, struct char_buffer cb, int gzip);
 struct char_buffer generateVRS(int part, int n_parts);
 void writeJsonToNet(struct net_writer *writer, struct char_buffer cb);
 
+// keep unused functions for now
+const char *airground_enum_string(airground_t ag);
+const char *nav_modes_flags_string(nav_modes_t flags);
+const char *nav_altitude_source_enum_string(nav_altitude_source_t src);
+
 #endif

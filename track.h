@@ -92,6 +92,7 @@ typedef struct
   uint64_t next_reduce_forward; /* when to next forward the data for reduced beast output */
   datasource_t source; /* where the data came from */
   uint32_t padding;
+  uint64_t padding2;
 } data_validity;
 
 /* Structure representing one point in the aircraft trace */
@@ -113,25 +114,42 @@ struct aircraft
   addrtype_t addrtype; // highest priority address type seen for this aircraft
   uint64_t seen; // Time (millis) at which the last packet was received
   uint64_t seen_pos; // Time (millis) at which the last position was received
-  uint64_t fatsv_last_emitted; // time (millis) aircraft was last FA emitted
-  uint64_t fatsv_last_force_emit; // time (millis) we last emitted only-on-change data
-  double signalLevel[8]; // Last 8 Signal Amplitudes
+
   long messages; // Number of Mode S messages received
-  struct state *trace; // array of positions representing the aircrafts trace/trail
-  int trace_len; // current number of points in the trace
-  int trace_write; // signal for writing the trace
-  int trace_full_write; // signal for writing the complete trace
-  int trace_alloc; // current number of allocated points
-  uint64_t trace_full_write_ts;
-  double trace_llat; // last saved lat
-  double trace_llon; // last saved lon
-  pthread_mutex_t trace_mutex;
   int destroy; // aircraft is being deleted
   int signalNext; // next index of signalLevel to use
   int altitude_baro; // Altitude (Baro)
   int altitude_baro_reliable;
   int altitude_geom; // Altitude (Geometric)
   int geom_delta; // Difference between Geometric and Baro altitudes
+
+  double signalLevel[8]; // Last 8 Signal Amplitudes
+
+  // ----
+
+  pthread_mutex_t trace_mutex; // 5*8bytes
+  struct state *trace; // array of positions representing the aircrafts trace/trail
+  double trace_llat; // last saved lat
+  double trace_llon; // last saved lon
+
+  // ----
+
+  int trace_len; // current number of points in the trace
+  int trace_write; // signal for writing the trace
+  int trace_full_write; // signal for writing the complete trace
+  int trace_alloc; // current number of allocated points
+  uint64_t trace_full_write_ts;
+  unsigned pos_nic; // NIC of last computed position
+  unsigned pos_rc; // Rc of last computed position
+
+  double lat, lon; // Coordinates obtained from CPR encoded data
+  int pos_reliable_odd; // Number of good global CPRs, indicates position reliability
+  int pos_reliable_even;
+  int pos_set;
+  float gs_last_pos; // Save a groundspeed associated with the last position
+
+  // ----
+
   int baro_rate; // Vertical rate (barometric)
   int geom_rate; // Vertical rate (geometric)
   unsigned ias;
@@ -149,6 +167,8 @@ struct aircraft
   unsigned cpr_even_nic;
   unsigned cpr_even_rc;
 
+  // ----
+
   float nav_qnh; // Altimeter setting (QNH/QFE), millibars
   float nav_heading; // target heading, degrees (0-359)
   float gs;
@@ -157,11 +177,48 @@ struct aircraft
   float track_rate; // Rate of change of ground track, degrees/second
   float roll; // Roll angle, degrees right
   float mag_heading; // Magnetic heading
+
   float true_heading; // True heading
-
   float calc_track; // Calculated Ground track
-
   uint64_t next_reduce_forward_DF11;
+  char callsign[16]; // Flight number
+
+  // ----
+
+  emergency_t emergency; // Emergency/priority status
+  airground_t airground; // air/ground status
+  nav_modes_t nav_modes; // enabled modes (autopilot, vnav, etc)
+  cpr_type_t cpr_odd_type;
+  cpr_type_t cpr_even_type;
+  nav_altitude_source_t nav_altitude_src;  // source of altitude used by automation
+  int modeA_hit; // did our squawk match a possible mode A reply in the last check period?
+  int modeC_hit; // did our altitude match a possible mode C reply in the last check period?
+
+  // data extracted from opstatus etc
+  int adsb_version; // ADS-B version (from ADS-B operational status); -1 means no ADS-B messages seen
+  int adsr_version; // As above, for ADS-R messages
+  int tisb_version; // As above, for TIS-B messages
+  heading_type_t adsb_hrd; // Heading Reference Direction setting (from ADS-B operational status)
+  heading_type_t adsb_tah; // Track Angle / Heading setting (from ADS-B operational status)
+  int globe_index; // custom index of the planes area on the globe
+  sil_type_t sil_type; // SIL supplement from TSS or opstatus
+
+  unsigned nic_a : 1; // NIC supplement A from opstatus
+  unsigned nic_c : 1; // NIC supplement C from opstatus
+  unsigned nic_baro : 1; // NIC baro supplement from TSS or opstatus
+  unsigned nac_p : 4; // NACp from TSS or opstatus
+  unsigned nac_v : 3; // NACv from airborne velocity or opstatus
+  unsigned sil : 2; // SIL from TSS or opstatus
+  unsigned gva : 2; // GVA from opstatus
+  unsigned sda : 2; // SDA from opstatus
+  unsigned alert : 1; // FS Flight status alert bit
+  unsigned spi : 1; // FS Flight status SPI (Special Position Identification) bit
+  // 18 bit ??
+  unsigned padding_b : 14;
+  // 32 bit !!
+
+  // ----
+
   data_validity callsign_valid;
   data_validity altitude_baro_valid;
   data_validity altitude_geom_valid;
@@ -200,83 +257,11 @@ struct aircraft
   data_validity alert_valid;
   data_validity spi_valid;
 
-  char callsign[12]; // Flight number
+  // ----
 
-  emergency_t emergency; // Emergency/priority status
-  airground_t airground; // air/ground status
-  nav_modes_t nav_modes; // enabled modes (autopilot, vnav, etc)
-  cpr_type_t cpr_odd_type;
-  cpr_type_t cpr_even_type;
-  nav_altitude_source_t nav_altitude_src;  // source of altitude used by automation
-
-  double lat, lon; // Coordinates obtained from CPR encoded data
-  unsigned pos_nic; // NIC of last computed position
-  unsigned pos_rc; // Rc of last computed position
-  int pos_reliable_odd; // Number of good global CPRs, indicates position reliability
-  int pos_reliable_even;
-  int pos_set;
-  float gs_last_pos; // Save a groundspeed associated with the last position
-  int globe_index; // custom index of the planes area on the globe
-
-  // data extracted from opstatus etc
-  int adsb_version; // ADS-B version (from ADS-B operational status); -1 means no ADS-B messages seen
-  int adsr_version; // As above, for ADS-R messages
-  int tisb_version; // As above, for TIS-B messages
-  heading_type_t adsb_hrd; // Heading Reference Direction setting (from ADS-B operational status)
-  heading_type_t adsb_tah; // Track Angle / Heading setting (from ADS-B operational status)
-
-  unsigned nic_a : 1; // NIC supplement A from opstatus
-  unsigned nic_c : 1; // NIC supplement C from opstatus
-  unsigned nic_baro : 1; // NIC baro supplement from TSS or opstatus
-  unsigned nac_p : 4; // NACp from TSS or opstatus
-  unsigned nac_v : 3; // NACv from airborne velocity or opstatus
-  unsigned sil : 2; // SIL from TSS or opstatus
-  unsigned gva : 2; // GVA from opstatus
-  unsigned sda : 2; // SDA from opstatus
-  unsigned alert : 1; // FS Flight status alert bit
-  unsigned spi : 1; // FS Flight status SPI (Special Position Identification) bit
-  sil_type_t sil_type; // SIL supplement from TSS or opstatus
-  int modeA_hit; // did our squawk match a possible mode A reply in the last check period?
-  int modeC_hit; // did our altitude match a possible mode C reply in the last check period?
-
-  int fatsv_emitted_altitude_baro; // last FA emitted altitude
-  int fatsv_emitted_altitude_geom; //      -"-         GNSS altitude
-  int fatsv_emitted_baro_rate; //      -"-         barometric rate
-  int fatsv_emitted_geom_rate; //      -"-         geometric rate
-  float fatsv_emitted_track; //      -"-         true track
-  float fatsv_emitted_track_rate; //      -"-         track rate of change
-  float fatsv_emitted_mag_heading; //      -"-         magnetic heading
-  float fatsv_emitted_true_heading; //      -"-         true heading
-  float fatsv_emitted_roll; //      -"-         roll angle
-  float fatsv_emitted_gs; //      -"-         groundspeed
-  unsigned fatsv_emitted_ias; //      -"-         IAS
-  unsigned fatsv_emitted_tas; //      -"-         TAS
-  float fatsv_emitted_mach; //      -"-         Mach number
-  airground_t fatsv_emitted_airground; //      -"-         air/ground state
-  unsigned fatsv_emitted_nav_altitude_mcp; //      -"-         MCP altitude
-  unsigned fatsv_emitted_nav_altitude_fms; //      -"-         FMS altitude
-  unsigned fatsv_emitted_nav_altitude_src; //      -"-         automation altitude source
-  float fatsv_emitted_nav_heading; //      -"-         target heading
-  nav_modes_t fatsv_emitted_nav_modes; //      -"-         enabled navigation modes
-  float fatsv_emitted_nav_qnh; //      -"-         altimeter setting
-  unsigned char fatsv_emitted_bds_10[7]; //      -"-         BDS 1,0 message
-  unsigned char fatsv_emitted_bds_30[7]; //      -"-         BDS 3,0 message
-  unsigned char fatsv_emitted_es_status[7]; //      -"-         ES operational status message
-  unsigned char fatsv_emitted_es_acas_ra[7]; //      -"-         ES ACAS RA report message
-  char fatsv_emitted_callsign[12]; //      -"-         callsign
-  addrtype_t fatsv_emitted_addrtype; //      -"-         address type (assumed ADSB_ICAO initially)
-  int fatsv_emitted_adsb_version; //      -"-         ADS-B version (assumed non-ADS-B initially)
-  unsigned fatsv_emitted_category; //      -"-         ADS-B emitter category (assumed A0 initially)
-  unsigned fatsv_emitted_squawk; //      -"-         squawk
-  unsigned fatsv_emitted_nac_p; //      -"-         NACp
-  unsigned fatsv_emitted_nac_v; //      -"-         NACv
-  unsigned fatsv_emitted_sil; //      -"-         SIL
-  sil_type_t fatsv_emitted_sil_type; //      -"-         SIL supplement
-  unsigned fatsv_emitted_nic_baro; //      -"-         NICbaro
-  emergency_t fatsv_emitted_emergency; //      -"-         emergency/priority status
-  uint32_t padding2;
   struct modesMessage first_message; // A copy of the first message we received for this aircraft.
-};
+
+} __attribute__ ((aligned (64)));
 
 /* Mode A/C tracking is done separately, not via the aircraft list,
  * and via a flat array rather than a list since there are only 4k possible values
