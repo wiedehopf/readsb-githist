@@ -120,8 +120,8 @@ struct aircraft
   long messages; // Number of Mode S messages received
   struct state *trace; // array of positions representing the aircrafts trace/trail
   int trace_len; // current number of points in the trace
-  int trace_len_last_write; // number of points in the trace at time of last write
-  int trace_len_last_full_write;
+  int trace_write; // signal for writing the trace
+  int trace_full_write; // signal for writing the complete trace
   int trace_alloc; // current number of allocated points
   uint64_t trace_full_write_ts;
   double trace_llat; // last saved lat

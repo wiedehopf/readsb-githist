@@ -1642,16 +1642,14 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         a->globe_index = globe_index(new_lat, new_lon);
         if (!a->trace) {
             pthread_mutex_lock(a->trace_mutex);
+
             a->trace_alloc = GLOBE_TRACE_SIZE / 128;
             a->trace = malloc(a->trace_alloc * sizeof(struct state));
             a->trace->timestamp = now;
+            a->trace_write = 1;
             a->trace_full_write_ts = 0; // rewrite full history file
-            pthread_mutex_unlock(a->trace_mutex);
-        }
 
-        if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
-            a->trace_alloc *= 2;
-            a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
+            pthread_mutex_unlock(a->trace_mutex);
         }
 
         struct state *trace = a->trace;
@@ -1676,12 +1674,19 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             }
 
             pthread_mutex_lock(a->trace_mutex);
+
             a->trace_len -= new_start;
             memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
+            a->trace_write = 1;
             a->trace_full_write_ts = 0; // rewrite full history file
+
             pthread_mutex_unlock(a->trace_mutex);
         }
 
+        if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
+            a->trace_alloc *= 2;
+            a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
+        }
         if (a->trace_len < a->trace_alloc / 4 && a->trace_alloc > GLOBE_TRACE_SIZE / 128) {
             a->trace_alloc /= 2;
             a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
@@ -1792,6 +1797,7 @@ save_state:
             new->altitude |= (1<<25);
 
         (a->trace_len)++;
+        a->trace_write = 1;
         //fprintf(stderr, "Added to trace for %06X (%d).\n", a->addr, a->trace_len);
 
 no_save_state:

@@ -439,7 +439,6 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
     }
 
     while (!Modes.exit) {
-        char filename[256];
         struct aircraft *a;
 
         pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
@@ -455,28 +454,44 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
 
         for (int j = start; j < end; j++) {
             for (a = Modes.aircrafts[j]; a; a = a->next) {
-                pthread_mutex_lock(a->trace_mutex);
+                struct char_buffer recent;
+                struct char_buffer full;
+                char filename[256];
 
-                if (a->trace_len == a->trace_len_last_write) {
-                    pthread_mutex_unlock(a->trace_mutex);
+                if (!a->trace_write) {
                     continue;
                 }
 
-                snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                writeJsonToGzip(filename, generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0), 1);
+                recent.len = 0;
+                full.len = 0;
 
-                a->trace_len_last_write = a->trace_len;
+                pthread_mutex_lock(a->trace_mutex);
 
-                if (a->trace_len >= a->trace_len_last_full_write + 122 || now > a->trace_full_write_ts + 10*60*1000) {
+                a->trace_write = 0;
+                a->trace_full_write++;
 
-                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                    writeJsonToGzip(filename, generateTraceJson(a, 0), 9);
+                recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
 
-                    a->trace_len_last_full_write = a->trace_len;
+                if (a->trace_full_write > 122 || now > a->trace_full_write_ts + 10*60*1000) {
+
+                    full = generateTraceJson(a, 0);
+
+                    a->trace_full_write = 0;
                     a->trace_full_write_ts = now;
                 }
 
                 pthread_mutex_unlock(a->trace_mutex);
+
+
+                if (recent.len > 0) {
+                    snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                    writeJsonToGzip(filename, recent, 1);
+                }
+
+                if (full.len > 0) {
+                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                    writeJsonToGzip(filename, full, 9);
+                }
             }
         }
 
