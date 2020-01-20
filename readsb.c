@@ -463,11 +463,11 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                 }
 
                 snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                writeJsonToGzip(filename, generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0), 5);
+                writeJsonToGzip(filename, generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0), 1);
 
                 a->trace_len_last_write = a->trace_len;
 
-                if (a->trace_len >= a->trace_len_last_full_write + 122 || now > a->trace_full_write_ts + 5*60*1000) {
+                if (a->trace_len >= a->trace_len_last_full_write + 122 || now > a->trace_full_write_ts + 10*60*1000) {
 
                     snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
                     writeJsonToGzip(filename, generateTraceJson(a, 0), 9);

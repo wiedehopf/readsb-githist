@@ -975,7 +975,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         Modes.aircrafts[mm->addr % AIRCRAFTS_BUCKETS] = a;
     }
 
-    pthread_mutex_lock(a->mutex);
+    // pthread_mutex_lock(a->mutex);
 
     if (mm->signalLevel > 0) {
         a->signalLevel[a->signalNext] = mm->signalLevel;
@@ -1369,7 +1369,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         mm->reduce_forward = 1;
     }
 
-    pthread_mutex_unlock(a->mutex);
+    // pthread_mutex_unlock(a->mutex);
     return (a);
 }
 
@@ -1641,10 +1641,12 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         a->globe_index = globe_index(new_lat, new_lon);
         if (!a->trace) {
+            pthread_mutex_lock(a->trace_mutex);
             a->trace_alloc = GLOBE_TRACE_SIZE / 128;
             a->trace = malloc(a->trace_alloc * sizeof(struct state));
             a->trace->timestamp = now;
             a->trace_full_write_ts = 0; // rewrite full history file
+            pthread_mutex_unlock(a->trace_mutex);
         }
 
         if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
@@ -1653,14 +1655,14 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         }
 
         struct state *trace = a->trace;
-        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 1200) * 1000) {
+        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 2400) * 1000) {
             int new_start = a->trace_len;
 
             if (a->trace_len < GLOBE_TRACE_SIZE) {
                 int found = 0;
                 for (int i = 0; i < a->trace_len; i++) {
                     struct state *state = &a->trace[i];
-                    if (now < state->timestamp + (24 * 3600 + 360) * 1000) {
+                    if (now < state->timestamp + (24 * 3600 + 1200) * 1000) {
                         new_start = i;
                         found = 1;
                         break;
