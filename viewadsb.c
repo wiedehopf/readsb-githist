@@ -241,12 +241,11 @@ int main(int argc, char **argv) {
     con->port = bo_connect_port;
     con->service = s;
 
-    con->mutex = malloc(sizeof(pthread_mutex_t));
-    if (!con->mutex || pthread_mutex_init(con->mutex, NULL)) {
+    if (pthread_mutex_init(&con->mutex, NULL)) {
         fprintf(stderr, "Unable to initialize connector mutex!\n");
         exit(1);
     }
-    pthread_mutex_lock(con->mutex);
+    pthread_mutex_lock(&con->mutex);
 
     serviceConnect(con);
     uint64_t timeout = mstime() + 10 * 1000;
@@ -310,9 +309,8 @@ int main(int argc, char **argv) {
     // Free local service and client
     if (s) free(s);
     freeaddrinfo(con->addr_info);
-    pthread_mutex_unlock(con->mutex);
-    pthread_mutex_destroy(con->mutex);
-    free(con->mutex);
+    pthread_mutex_unlock(&con->mutex);
+    pthread_mutex_destroy(&con->mutex);
     free(con);
 
 exit:

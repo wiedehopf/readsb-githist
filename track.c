@@ -106,15 +106,8 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     // Copy the first message so we can emit it later when a second message arrives.
     a->first_message = *mm;
 
-    a->mutex = malloc(sizeof(pthread_mutex_t));
-    if (!a->mutex || pthread_mutex_init(a->mutex, NULL)) {
-        fprintf(stderr, "Unable to initialize aircraft mutex!\n");
-        exit(1);
-    }
-
     if (Modes.json_globe_index) {
-        a->trace_mutex = malloc(sizeof(pthread_mutex_t));
-        if (!a->trace_mutex || pthread_mutex_init(a->trace_mutex, NULL)) {
+        if (pthread_mutex_init(&a->trace_mutex, NULL)) {
             fprintf(stderr, "Unable to initialize trace mutex!\n");
             exit(1);
         }
@@ -975,8 +968,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         Modes.aircrafts[mm->addr % AIRCRAFTS_BUCKETS] = a;
     }
 
-    // pthread_mutex_lock(a->mutex);
-
     if (mm->signalLevel > 0) {
         a->signalLevel[a->signalNext] = mm->signalLevel;
         a->signalNext = (a->signalNext + 1) & 7;
@@ -1369,7 +1360,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         mm->reduce_forward = 1;
     }
 
-    // pthread_mutex_unlock(a->mutex);
     return (a);
 }
 
@@ -1601,21 +1591,16 @@ static void cleanupAircraft(struct aircraft *a) {
     while (iter) {
         a = iter;
         iter = iter->next;
-        if (a->trace_mutex) {
-            char filename[256];
-            snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-            unlink(filename);
-            snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-            unlink(filename);
-            pthread_mutex_unlock(a->trace_mutex);
-            pthread_mutex_destroy(a->trace_mutex);
-            free(a->trace_mutex);
-        }
-        if (a->mutex) {
-            pthread_mutex_unlock(a->mutex);
-            pthread_mutex_destroy(a->mutex);
-            free(a->mutex);
-        }
+
+        char filename[256];
+        snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        unlink(filename);
+        snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        unlink(filename);
+
+        pthread_mutex_unlock(&a->trace_mutex);
+        pthread_mutex_destroy(&a->trace_mutex);
+
         if (a->trace) {
             free(a->trace);
         }
@@ -1641,7 +1626,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         a->globe_index = globe_index(new_lat, new_lon);
         if (!a->trace) {
-            pthread_mutex_lock(a->trace_mutex);
+            pthread_mutex_lock(&a->trace_mutex);
 
             a->trace_alloc = GLOBE_TRACE_SIZE / 128;
             a->trace = malloc(a->trace_alloc * sizeof(struct state));
@@ -1649,7 +1634,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             a->trace_write = 1;
             a->trace_full_write_ts = 0; // rewrite full history file
 
-            pthread_mutex_unlock(a->trace_mutex);
+            pthread_mutex_unlock(&a->trace_mutex);
         }
 
         struct state *trace = a->trace;
@@ -1673,14 +1658,14 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
                 new_start = GLOBE_TRACE_SIZE / 64;
             }
 
-            pthread_mutex_lock(a->trace_mutex);
+            pthread_mutex_lock(&a->trace_mutex);
 
             a->trace_len -= new_start;
             memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
             a->trace_write = 1;
             a->trace_full_write_ts = 0; // rewrite full history file
 
-            pthread_mutex_unlock(a->trace_mutex);
+            pthread_mutex_unlock(&a->trace_mutex);
         }
 
         if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {

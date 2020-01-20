@@ -87,7 +87,7 @@ struct net_connector
     int gai_error;
     int gai_request_in_progress;
     pthread_t thread;
-    pthread_mutex_t *mutex;
+    pthread_mutex_t mutex;
 };
 
 // Structure used to describe a networking client

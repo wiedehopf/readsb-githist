@@ -331,7 +331,7 @@ struct client *serviceConnect(struct net_connector *con) {
             return NULL;
         } else {
 
-            if (pthread_mutex_trylock(con->mutex)) {
+            if (pthread_mutex_trylock(&con->mutex)) {
                 // couldn't acquire lock, request not finished
                 con->next_reconnect = mstime() + 50;
                 return NULL;
@@ -579,12 +579,11 @@ void modesInitNet(void) {
         else if (strcmp(con->protocol, "sbs_in_prio") == 0)
             con->service = sbs_in_prio;
 
-        con->mutex = malloc(sizeof(pthread_mutex_t));
-        if (!con->mutex || pthread_mutex_init(con->mutex, NULL)) {
+        if (pthread_mutex_init(&con->mutex, NULL)) {
             fprintf(stderr, "Unable to initialize connector mutex!\n");
             exit(1);
         }
-        pthread_mutex_lock(con->mutex);
+        pthread_mutex_lock(&con->mutex);
     }
     serviceReconnectCallback(now);
 }
@@ -3450,7 +3449,7 @@ static void *pthreadGetaddrinfo(void *param) {
 
     con->gai_error = getaddrinfo(con->address, con->port, &gai_hints, &con->addr_info);
 
-    pthread_mutex_unlock(con->mutex);
+    pthread_mutex_unlock(&con->mutex);
     return NULL;
 }
 

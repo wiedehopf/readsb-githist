@@ -465,7 +465,7 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                 recent.len = 0;
                 full.len = 0;
 
-                pthread_mutex_lock(a->trace_mutex);
+                pthread_mutex_lock(&a->trace_mutex);
 
                 a->trace_write = 0;
                 a->trace_full_write++;
@@ -480,7 +480,7 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                     a->trace_full_write_ts = now;
                 }
 
-                pthread_mutex_unlock(a->trace_mutex);
+                pthread_mutex_unlock(&a->trace_mutex);
 
 
                 if (recent.len > 0) {
@@ -784,19 +784,14 @@ static void cleanup_and_exit(int code) {
         while (a) {
             na = a->next;
             if (a) {
-                if (a->trace_mutex) {
-                    pthread_mutex_unlock(a->trace_mutex);
-                    pthread_mutex_destroy(a->trace_mutex);
-                    free(a->trace_mutex);
-                }
+
+                pthread_mutex_unlock(&a->trace_mutex);
+                pthread_mutex_destroy(&a->trace_mutex);
+
                 if (a->trace) {
                     free(a->trace);
                 }
-                if (a->mutex) {
-                    pthread_mutex_unlock(a->mutex);
-                    pthread_mutex_destroy(a->mutex);
-                    free(a->mutex);
-                }
+
                 free(a);
             }
             a = na;
@@ -813,9 +808,8 @@ static void cleanup_and_exit(int code) {
         struct net_connector *con = Modes.net_connectors[i];
         free(con->address);
         freeaddrinfo(con->addr_info);
-        pthread_mutex_unlock(con->mutex);
-        pthread_mutex_destroy(con->mutex);
-        free(con->mutex);
+        pthread_mutex_unlock(&con->mutex);
+        pthread_mutex_destroy(&con->mutex);
         free(con);
     }
     free(Modes.net_connectors);
