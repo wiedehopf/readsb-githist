@@ -65,6 +65,7 @@ static void cleanupAircraft(struct aircraft *a);
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now);
 static void adjustExpire(struct aircraft *a, uint64_t timeout);
 static void position_bad(struct aircraft *a);
+static void resize_trace(struct aircraft *a, uint64_t now);
 
 //
 // Return a new aircraft structure for the linked list of tracked
@@ -1528,6 +1529,10 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
+                if (now > a->trace_full_write_ts + 30 * 60 * 1000) {
+                    resize_trace(a, now);
+                }
+
 
                 prev = a;
                 a = a->next;
@@ -1625,45 +1630,9 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             pthread_mutex_unlock(&a->trace_mutex);
         }
 
+        resize_trace(a, now);
+
         struct state *trace = a->trace;
-        if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 2400) * 1000) {
-            int new_start = a->trace_len;
-
-            if (a->trace_len < GLOBE_TRACE_SIZE) {
-                int found = 0;
-                for (int i = 0; i < a->trace_len; i++) {
-                    struct state *state = &a->trace[i];
-                    if (now < state->timestamp + (24 * 3600 + 1200) * 1000) {
-                        new_start = i;
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found)
-                    new_start = a->trace_len;
-            }
-            if (a->trace_len == GLOBE_TRACE_SIZE) {
-                new_start = GLOBE_TRACE_SIZE / 64;
-            }
-
-            pthread_mutex_lock(&a->trace_mutex);
-
-            a->trace_len -= new_start;
-            memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
-            a->trace_write = 1;
-            a->trace_full_write_ts = 0; // rewrite full history file
-
-            pthread_mutex_unlock(&a->trace_mutex);
-        }
-
-        if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
-            a->trace_alloc *= 2;
-            a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
-        }
-        if (a->trace_len < a->trace_alloc / 4 && a->trace_alloc > GLOBE_TRACE_SIZE / 128) {
-            a->trace_alloc /= 2;
-            a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
-        }
 
         struct state *new = &(trace[a->trace_len]);
         int on_ground = 0;
@@ -1832,5 +1801,51 @@ static void position_bad(struct aircraft *a) {
         a->position_valid.source = SOURCE_INVALID;
         a->pos_reliable_odd = 0;
         a->pos_reliable_even = 0;
+    }
+}
+
+static void resize_trace(struct aircraft *a, uint64_t now) {
+    if (a->trace_len == 0)
+        return;
+
+    struct state *trace = a->trace;
+
+    if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 2400) * 1000) {
+        int new_start = a->trace_len;
+
+        if (a->trace_len < GLOBE_TRACE_SIZE) {
+            int found = 0;
+            for (int i = 0; i < a->trace_len; i++) {
+                struct state *state = &a->trace[i];
+                if (now < state->timestamp + (24 * 3600 + 1200) * 1000) {
+                    new_start = i;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found)
+                new_start = a->trace_len;
+        }
+        if (a->trace_len == GLOBE_TRACE_SIZE) {
+            new_start = GLOBE_TRACE_SIZE / 64;
+        }
+
+        pthread_mutex_lock(&a->trace_mutex);
+
+        a->trace_len -= new_start;
+        memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
+        a->trace_write = 1;
+        a->trace_full_write_ts = 0; // rewrite full history file
+
+        pthread_mutex_unlock(&a->trace_mutex);
+    }
+
+    if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
+        a->trace_alloc *= 2;
+        a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
+    }
+    if (a->trace_len < a->trace_alloc / 4 && a->trace_alloc > GLOBE_TRACE_SIZE / 128) {
+        a->trace_alloc /= 2;
+        a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
     }
 }

@@ -490,7 +490,11 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
 
                 if (full.len > 0) {
                     snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-                    writeJsonToGzip(filename, full, 9);
+
+                    if (a->addr & MODES_NON_ICAO_ADDRESS)
+                        writeJsonToGzip(filename, full, 4);
+                    else
+                        writeJsonToGzip(filename, full, 9);
                 }
             }
         }
