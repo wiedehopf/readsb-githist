@@ -2376,6 +2376,22 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
     struct stat fileinfo = {0};
 
     if (gzip > 7 && Modes.globe_history_dir) {
+        static int enable_hist;
+        char tstring[100];
+        time_t now = time(NULL);
+        strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
+        struct tm utc = *(gmtime(&now));
+        //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
+
+        if (!enable_hist && utc.tm_hour == 0 && utc.tm_min < 10) {
+            enable_hist = 1;
+            fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
+            fprintf(stderr, "Starting to write globe_history\n");
+        }
+
+        if (!enable_hist)
+            goto no_copy;
+
         if (stat(Modes.globe_history_dir, &fileinfo) == -1) {
             mkdir(Modes.globe_history_dir, 0755);
         }
@@ -2399,12 +2415,6 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
             goto no_copy;
         }
 
-        char tstring[100];
-        time_t now = time(NULL);
-        strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
-        //struct tm utc = *(gmtime(&now));
-        //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
-
         snprintf(histPath, PATH_MAX - 100, "%s/%s", Modes.globe_history_dir, tstring);
         histPath[PATH_MAX - 101] = 0;
 
@@ -2426,7 +2436,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
 
 
         //fprintf(stderr, "%lu %s\n", new_size, tmppath2);
-        if (stat(histPath, &fileinfo) || new_size > fileinfo.st_size) {
+        if (1 || stat(histPath, &fileinfo) || new_size > fileinfo.st_size) {
             if (rename(tmppath2, histPath)) {
                 unlink(tmppath2);
             }
