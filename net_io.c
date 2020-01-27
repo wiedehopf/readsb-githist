@@ -1968,7 +1968,7 @@ struct char_buffer generateAircraftJson(int globe_index){
     char *line_start;
     int first = 1;
 
-    _messageNow = now;
+    //_messageNow = now;
 
     p = safe_snprintf(p, end,
             "{ \"now\" : %.1f,\n"
@@ -2876,7 +2876,7 @@ struct char_buffer generateVRS(int part, int n_parts) {
     int part_len = AIRCRAFTS_BUCKETS / n_parts;
     int part_start = part * part_len;
 
-    _messageNow = now;
+    //_messageNow = now;
 
     p = safe_snprintf(p, end,
             "{\"acList\":[");
