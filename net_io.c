@@ -2378,7 +2378,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
     if (gzip > 7 && Modes.globe_history_dir) {
         static int enable_hist;
         char tstring[100];
-        time_t now = time(NULL);
+        time_t now = time(NULL) - 630;
         strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
         struct tm utc = *(gmtime(&now));
         //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);

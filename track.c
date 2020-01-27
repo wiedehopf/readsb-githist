@@ -56,6 +56,8 @@
 
 /* #define DEBUG_CPR_CHECKS */
 
+#define GLOBE_STEP 256
+
 uint32_t modeAC_count[4096];
 uint32_t modeAC_lastcount[4096];
 uint32_t modeAC_match[4096];
@@ -1529,7 +1531,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
-                if (now > a->trace_full_write_ts + 30 * 60 * 1000) {
+                if (now > a->trace_full_write_ts + (10 * 60 - 5) * 1000) {
                     resize_trace(a, now);
                 }
 
@@ -1621,7 +1623,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         if (!a->trace) {
             pthread_mutex_lock(&a->trace_mutex);
 
-            a->trace_alloc = GLOBE_TRACE_SIZE / 128;
+            a->trace_alloc = GLOBE_STEP;
             a->trace = malloc(a->trace_alloc * sizeof(struct state));
             a->trace->timestamp = now;
             a->trace_write = 1;
@@ -1840,12 +1842,12 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
         pthread_mutex_unlock(&a->trace_mutex);
     }
 
-    if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc < GLOBE_TRACE_SIZE) {
-        a->trace_alloc *= 2;
+    if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc + GLOBE_STEP <= GLOBE_TRACE_SIZE) {
+        a->trace_alloc += GLOBE_STEP;
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
     }
-    if (a->trace_len < a->trace_alloc / 4 && a->trace_alloc > GLOBE_TRACE_SIZE / 128) {
-        a->trace_alloc /= 2;
+    if (a->trace_len + 15 * GLOBE_STEP / 8 <= a->trace_alloc) {
+        a->trace_alloc -= GLOBE_STEP;
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
     }
 }
