@@ -458,7 +458,7 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                 struct char_buffer full;
                 char filename[256];
 
-                if (!a->trace_write && now < a->trace_full_write_ts + 10*60*1000) {
+                if (!a->trace_write) {
                     continue;
                 }
 
@@ -472,7 +472,7 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
 
                 recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
 
-                if (a->trace_full_write > 122 || now >= a->trace_full_write_ts + 10*60*1000) {
+                if (a->trace_full_write > 122) {
 
                     full = generateTraceJson(a, 0);
 

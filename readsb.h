@@ -280,6 +280,8 @@ typedef enum {
 #define AIRCRAFTS_BUCKETS (1<<15)
 
 #define GLOBE_TRACE_SIZE 32768
+#define GLOBE_OVERLAP 1200
+#define GLOBE_STEP 256
 
 // Include subheaders after all the #defines are in place
 

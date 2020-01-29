@@ -280,20 +280,20 @@ trackDataValid (const data_validity *v)
 
 /* is this bit of data fresh? */
 static inline int
-trackDataFresh (const data_validity *v)
+trackDataFresh (const data_validity *v, uint64_t now)
 {
-  return (v->source != SOURCE_INVALID && messageNow () < v->stale);
+  return (v->source != SOURCE_INVALID && now < v->stale);
 }
 
 /* what's the age of this data, in milliseconds? */
 static inline uint64_t
-trackDataAge (const data_validity *v)
+trackDataAge (uint64_t now, const data_validity *v)
 {
   if (v->source == SOURCE_INVALID)
     return ~(uint64_t) 0;
-  if (v->updated >= messageNow ())
+  if (v->updated >= now)
     return 0;
-  return (messageNow () - v->updated);
+  return (now - v->updated);
 }
 
 /* Update aircraft state from data in the provided mesage.

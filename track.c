@@ -56,8 +56,6 @@
 
 /* #define DEBUG_CPR_CHECKS */
 
-#define GLOBE_STEP 256
-
 uint32_t modeAC_count[4096];
 uint32_t modeAC_lastcount[4096];
 uint32_t modeAC_match[4096];
@@ -134,30 +132,31 @@ static struct aircraft *trackFindAircraft(uint32_t addr) {
 // If so, update the validity and return 1
 
 static int accept_data(data_validity *d, datasource_t source, struct modesMessage *mm, int reduce_often) {
-    if (messageNow() < d->updated)
+    uint64_t receiveTime = mm->sysTimestampMsg;
+
+    if (receiveTime < d->updated)
         return 0;
 
-    if (source < d->source && messageNow() < d->stale)
+    if (source < d->source && receiveTime < d->stale)
         return 0;
 
     d->source = source;
-    d->updated = messageNow();
-    d->stale = messageNow() + (d->stale_interval ? d->stale_interval : 60000);
-    d->expires = messageNow() + (d->expire_interval ? d->expire_interval : 70000);
+    d->updated = receiveTime;
+    d->stale = receiveTime + (d->stale_interval ? d->stale_interval : 60000);
+    d->expires = receiveTime + (d->expire_interval ? d->expire_interval : 70000);
 
-    if (messageNow() > d->next_reduce_forward && !mm->sbs_in) {
+    if (receiveTime > d->next_reduce_forward && !mm->sbs_in) {
         if (mm->msgtype == 17 || reduce_often) {
-            d->next_reduce_forward = messageNow() + Modes.net_output_beast_reduce_interval;
+            d->next_reduce_forward = receiveTime + Modes.net_output_beast_reduce_interval;
         } else {
-            d->next_reduce_forward = messageNow() + Modes.net_output_beast_reduce_interval * 4;
+            d->next_reduce_forward = receiveTime + Modes.net_output_beast_reduce_interval * 4;
         }
         // make sure global CPR stays possible even at high interval:
         if (Modes.net_output_beast_reduce_interval > 7000 && mm->cpr_valid) {
-            d->next_reduce_forward = messageNow() + 7000;
+            d->next_reduce_forward = receiveTime + 7000;
         }
         mm->reduce_forward = 1;
     }
-
     return 1;
 }
 
@@ -180,10 +179,10 @@ static void combine_validity(data_validity *to, const data_validity *from1, cons
     to->expires = (from1->expires < from2->expires) ? from1->expires : from2->expires; // the earlier of the two expiry times
 }
 
-static int compare_validity(const data_validity *lhs, const data_validity *rhs) {
-    if (messageNow() < lhs->stale && lhs->source > rhs->source)
+static int compare_validity(const data_validity *lhs, const data_validity *rhs, uint64_t now) {
+    if (now < lhs->stale && lhs->source > rhs->source)
         return 1;
-    else if (messageNow() < rhs->stale && lhs->source < rhs->source)
+    else if (now < rhs->stale && lhs->source < rhs->source)
         return -1;
     else if (lhs->updated > rhs->updated)
         return 1;
@@ -270,17 +269,18 @@ static int speed_check(struct aircraft *a, double lat, double lon, int surface) 
     double range;
     int speed;
     int inrange;
+    uint64_t now = a->seen;
 
     if (!trackDataValid(&a->position_valid))
         return 1; // no reference, assume OK
 
-    elapsed = trackDataAge(&a->position_valid);
+    elapsed = trackDataAge(now, &a->position_valid);
 
     if (trackDataValid(&a->gs_valid)) {
         // use the larger of the current and earlier speed
         speed = (a->gs_last_pos > a->gs) ? a->gs_last_pos : a->gs;
         // add 2 knots for every second we haven't known the speed
-        speed = speed + (2*trackDataAge(&a->gs_valid)/1000.0);
+        speed = speed + (2*trackDataAge(now, &a->gs_valid)/1000.0);
     } else if (trackDataValid(&a->tas_valid)) {
         speed = a->tas * 4 / 3;
     } else if (trackDataValid(&a->ias_valid)) {
@@ -417,7 +417,7 @@ static int doLocalCPR(struct aircraft *a, struct modesMessage *mm, double *lat, 
         *rc = a->cpr_even_rc;
     }
 
-    if (messageNow() - a->position_valid.updated < (10*60*1000)) {
+    if (mm->sysTimestampMsg - a->position_valid.updated < (10*60*1000)) {
         reflat = a->lat;
         reflon = a->lon;
 
@@ -949,7 +949,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         return NULL;
     }
 
-    _messageNow = mm->sysTimestampMsg;
+    uint64_t now = mm->sysTimestampMsg;
 
     // Lookup our aircraft or create a new one
     a = trackFindAircraft(mm->addr);
@@ -963,11 +963,11 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         a->signalLevel[a->signalNext] = mm->signalLevel;
         a->signalNext = (a->signalNext + 1) & 7;
     }
-    a->seen = messageNow();
+    a->seen = mm->sysTimestampMsg;
     a->messages++;
 
     // update addrtype, we only ever go towards "more direct" types
-    if (mm->addrtype < a->addrtype && _messageNow > 30 * 1000 +  a->position_valid.updated)  {
+    if (mm->addrtype < a->addrtype && now > 30 * 1000 +  a->position_valid.updated)  {
         a->addrtype = mm->addrtype;
     }
 
@@ -1053,17 +1053,17 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         int min_fpm = -12500;
 
         if (abs(delta) >= 300) {
-            fpm = delta*60*10/(abs((int)trackDataAge(&a->altitude_baro_valid)/100)+10);
-            if (trackDataValid(&a->geom_rate_valid) && trackDataAge(&a->geom_rate_valid) < trackDataAge(&a->baro_rate_valid)) {
-                min_fpm = a->geom_rate - 1500 - min(11000, ((int)trackDataAge(&a->geom_rate_valid)/2));
-                max_fpm = a->geom_rate + 1500 + min(11000, ((int)trackDataAge(&a->geom_rate_valid)/2));
+            fpm = delta*60*10/(abs((int)trackDataAge(now, &a->altitude_baro_valid)/100)+10);
+            if (trackDataValid(&a->geom_rate_valid) && trackDataAge(now, &a->geom_rate_valid) < trackDataAge(now, &a->baro_rate_valid)) {
+                min_fpm = a->geom_rate - 1500 - min(11000, ((int)trackDataAge(now, &a->geom_rate_valid)/2));
+                max_fpm = a->geom_rate + 1500 + min(11000, ((int)trackDataAge(now, &a->geom_rate_valid)/2));
             } else if (trackDataValid(&a->baro_rate_valid)) {
-                min_fpm = a->baro_rate - 1500 - min(11000, ((int)trackDataAge(&a->baro_rate_valid)/2));
-                max_fpm = a->baro_rate + 1500 + min(11000, ((int)trackDataAge(&a->baro_rate_valid)/2));
+                min_fpm = a->baro_rate - 1500 - min(11000, ((int)trackDataAge(now, &a->baro_rate_valid)/2));
+                max_fpm = a->baro_rate + 1500 + min(11000, ((int)trackDataAge(now, &a->baro_rate_valid)/2));
             }
-            if (trackDataValid(&a->altitude_baro_valid) && trackDataAge(&a->altitude_baro_valid) < 30000) {
+            if (trackDataValid(&a->altitude_baro_valid) && trackDataAge(now, &a->altitude_baro_valid) < 30000) {
                 a->altitude_baro_reliable = min(
-                        ALTITUDE_BARO_RELIABLE_MAX - (ALTITUDE_BARO_RELIABLE_MAX*trackDataAge(&a->altitude_baro_valid)/30000),
+                        ALTITUDE_BARO_RELIABLE_MAX - (ALTITUDE_BARO_RELIABLE_MAX*trackDataAge(now, &a->altitude_baro_valid)/30000),
                         a->altitude_baro_reliable);
             } else {
                 a->altitude_baro_reliable = 0;
@@ -1195,7 +1195,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         // If our current state is UNCERTAIN, accept new data as normal
         // If our current state is certain but new data is not, only accept the uncertain state if the certain data has gone stale
         if (mm->airground != AG_UNCERTAIN ||
-                (mm->airground == AG_UNCERTAIN && !trackDataFresh(&a->airground_valid))) {
+                (mm->airground == AG_UNCERTAIN && !trackDataFresh(&a->airground_valid, now))) {
             if (accept_data(&a->airground_valid, mm->source, mm, 0)) {
                 a->airground = mm->airground;
             }
@@ -1298,8 +1298,8 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     // Now handle derived data
 
     // derive geometric altitude if we have baro + delta
-    if (a->altitude_baro_reliable >= 3 && compare_validity(&a->altitude_baro_valid, &a->altitude_geom_valid) > 0 &&
-            compare_validity(&a->geom_delta_valid, &a->altitude_geom_valid) > 0) {
+    if (a->altitude_baro_reliable >= 3 && compare_validity(&a->altitude_baro_valid, &a->altitude_geom_valid, now) > 0 &&
+            compare_validity(&a->geom_delta_valid, &a->altitude_geom_valid, now) > 0) {
         // Baro and delta are both more recent than geometric, derive geometric from baro + delta
         a->altitude_geom = a->altitude_baro + a->geom_delta;
         combine_validity(&a->altitude_geom_valid, &a->altitude_baro_valid, &a->geom_delta_valid);
@@ -1324,7 +1324,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
             // update addrtype, we use the type from the accepted position.
             a->addrtype = mm->addrtype;
 
-            globe_stuff(a, mm->decoded_lat, mm->decoded_lon, mm->sysTimestampMsg);
+            globe_stuff(a, mm->decoded_lat, mm->decoded_lon, now);
 
             a->lat = mm->decoded_lat;
             a->lon = mm->decoded_lon;
@@ -1345,9 +1345,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
 
 
-    if (mm->msgtype == 11 && mm->IID == 0 && mm->correctedbits == 0 && messageNow() > a->next_reduce_forward_DF11) {
+    if (mm->msgtype == 11 && mm->IID == 0 && mm->correctedbits == 0 && now > a->next_reduce_forward_DF11) {
 
-        a->next_reduce_forward_DF11 = messageNow() + Modes.net_output_beast_reduce_interval * 4;
+        a->next_reduce_forward_DF11 = now + Modes.net_output_beast_reduce_interval * 4;
         mm->reduce_forward = 1;
     }
 
@@ -1531,7 +1531,10 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
-                if (now > a->trace_full_write_ts + (10 * 60 - 5) * 1000) {
+                if (a->trace_len > 0 && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 60) * 1000) {
+                    a->trace_write = 1;
+                    a->trace_full_write_ts = now; // hacky
+                    a->trace_full_write = 9999; // rewrite full history file
                     resize_trace(a, now);
                 }
 
@@ -1812,14 +1815,14 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
 
     struct state *trace = a->trace;
 
-    if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + 2400) * 1000) {
+    if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + GLOBE_OVERLAP * 2) * 1000) {
         int new_start = a->trace_len;
 
         if (a->trace_len < GLOBE_TRACE_SIZE) {
             int found = 0;
             for (int i = 0; i < a->trace_len; i++) {
                 struct state *state = &a->trace[i];
-                if (now < state->timestamp + (24 * 3600 + 1200) * 1000) {
+                if (now < state->timestamp + (24 * 3600 + GLOBE_OVERLAP) * 1000) {
                     new_start = i;
                     found = 1;
                     break;
@@ -1836,18 +1839,23 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
 
         a->trace_len -= new_start;
         memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
+
         a->trace_write = 1;
-        a->trace_full_write_ts = 0; // rewrite full history file
+        a->trace_full_write = 9999; // rewrite full history file
 
         pthread_mutex_unlock(&a->trace_mutex);
     }
 
     if (a->trace_len + 4 > a->trace_alloc && a->trace_alloc + GLOBE_STEP <= GLOBE_TRACE_SIZE) {
+        pthread_mutex_lock(&a->trace_mutex);
         a->trace_alloc += GLOBE_STEP;
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
+        pthread_mutex_unlock(&a->trace_mutex);
     }
     if (a->trace_len + 15 * GLOBE_STEP / 8 <= a->trace_alloc) {
+        pthread_mutex_lock(&a->trace_mutex);
         a->trace_alloc -= GLOBE_STEP;
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
+        pthread_mutex_unlock(&a->trace_mutex);
     }
 }

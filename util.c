@@ -56,8 +56,6 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-uint64_t _messageNow = 0;
-
 uint64_t mstime(void) {
     struct timeval tv;
     uint64_t mst;

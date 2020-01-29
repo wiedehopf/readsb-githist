@@ -1968,8 +1968,6 @@ struct char_buffer generateAircraftJson(int globe_index){
     char *line_start;
     int first = 1;
 
-    //_messageNow = now;
-
     p = safe_snprintf(p, end,
             "{ \"now\" : %.1f,\n"
             "  \"messages\" : %u,\n",
@@ -2378,7 +2376,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
     if (gzip > 7 && Modes.globe_history_dir) {
         static int enable_hist;
         char tstring[100];
-        time_t now = time(NULL) - 630;
+        time_t now = time(NULL) - (GLOBE_OVERLAP - 30);
         strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
         struct tm utc = *(gmtime(&now));
         //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
@@ -2875,8 +2873,6 @@ struct char_buffer generateVRS(int part, int n_parts) {
     int first = 1;
     int part_len = AIRCRAFTS_BUCKETS / n_parts;
     int part_start = part * part_len;
-
-    //_messageNow = now;
 
     p = safe_snprintf(p, end,
             "{\"acList\":[");
