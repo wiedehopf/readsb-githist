@@ -1590,11 +1590,20 @@ static void cleanupAircraft(struct aircraft *a) {
         a = iter;
         iter = iter->next;
 
-        char filename[256];
-        snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-        unlink(filename);
-        snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-        unlink(filename);
+        char filename[1024];
+        char fullpath[PATH_MAX];
+
+        snprintf(filename, 1024, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        snprintf(fullpath, PATH_MAX, "%s/%s", Modes.json_dir, filename);
+        fullpath[PATH_MAX - 1] = 0;
+        unlink(fullpath);
+
+        snprintf(filename, 1024, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        snprintf(fullpath, PATH_MAX, "%s/%s", Modes.json_dir, filename);
+        fullpath[PATH_MAX - 1] = 0;
+        unlink(fullpath);
+
+        //fprintf(stderr, "unlink %06x: %s\n", a->addr, fullpath);
 
         pthread_mutex_unlock(&a->trace_mutex);
         pthread_mutex_destroy(&a->trace_mutex);
