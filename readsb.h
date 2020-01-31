@@ -85,6 +85,8 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <limits.h>
+#include <sys/types.h>
+#include <dirent.h>
 #else
 #include "winstubs.h" //Put everything Windows specific in here
 #endif

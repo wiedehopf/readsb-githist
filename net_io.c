@@ -1491,10 +1491,8 @@ static int decodeBinMessage(struct client *c, char *p, int remote) {
     int j;
     char ch;
     unsigned char msg[MODES_LONG_MSG_BYTES + 7];
-    static struct modesMessage zeroMessage;
-    struct modesMessage mm;
+    struct modesMessage *mm;
     MODES_NOTUSED(c);
-    memset(&mm, 0, sizeof (mm));
 
     ch = *p++; /// Get the message type
 
@@ -1528,100 +1526,100 @@ static int decodeBinMessage(struct client *c, char *p, int remote) {
         alt = ieee754_binary32_le_to_float(msg + 12);
 
         handle_radarcape_position(lat, lon, alt);
-    } else {
-        // Ignore this.
-        return 0;
     }
 
-    if (msgLen) {
-        mm = zeroMessage;
+    if (!msgLen)
+        return 0;
 
-        /* Beast messages are marked depending on their source. From internet they are marked
-         * remote so that we don't try to pass them off as being received by this instance
-         * when forwarding them.
-         */
-        mm.remote = remote;
+    mm = calloc(1, sizeof(struct modesMessage));
 
-        // Grab the timestamp (big endian format)
-        mm.timestampMsg = 0;
-        for (j = 0; j < 6; j++) {
-            ch = *p++;
-            mm.timestampMsg = mm.timestampMsg << 8 | (ch & 255);
-            if (0x1A == ch) {
-                p++;
-            }
-        }
+    /* Beast messages are marked depending on their source. From internet they are marked
+     * remote so that we don't try to pass them off as being received by this instance
+     * when forwarding them.
+     */
+    mm->remote = remote;
 
-        // record reception time as the time we read it.
-        mm.sysTimestampMsg = mstime();
-
-        ch = *p++; // Grab the signal level
-        mm.signalLevel = ((unsigned char) ch / 255.0);
-        mm.signalLevel = mm.signalLevel * mm.signalLevel;
-
-        /* In case of Mode-S Beast use the signal level per message for statistics */
-        if (Modes.sdr_type == SDR_MODESBEAST) {
-            Modes.stats_current.signal_power_sum += mm.signalLevel;
-            Modes.stats_current.signal_power_count += 1;
-
-            if (mm.signalLevel > Modes.stats_current.peak_signal_power)
-                Modes.stats_current.peak_signal_power = mm.signalLevel;
-            if (mm.signalLevel > 0.50119)
-                Modes.stats_current.strong_signal_count++; // signal power above -3dBFS
-        }
-
+    // Grab the timestamp (big endian format)
+    mm->timestampMsg = 0;
+    for (j = 0; j < 6; j++) {
+        ch = *p++;
+        mm->timestampMsg = mm->timestampMsg << 8 | (ch & 255);
         if (0x1A == ch) {
             p++;
         }
+    }
 
-        for (j = 0; j < msgLen; j++) { // and the data
-            msg[j] = ch = *p++;
-            if (0x1A == ch) {
-                p++;
-            }
+    // record reception time as the time we read it.
+    mm->sysTimestampMsg = mstime();
+
+    ch = *p++; // Grab the signal level
+    mm->signalLevel = ((unsigned char) ch / 255.0);
+    mm->signalLevel = mm->signalLevel * mm->signalLevel;
+
+    /* In case of Mode-S Beast use the signal level per message for statistics */
+    if (Modes.sdr_type == SDR_MODESBEAST) {
+        Modes.stats_current.signal_power_sum += mm->signalLevel;
+        Modes.stats_current.signal_power_count += 1;
+
+        if (mm->signalLevel > Modes.stats_current.peak_signal_power)
+            Modes.stats_current.peak_signal_power = mm->signalLevel;
+        if (mm->signalLevel > 0.50119)
+            Modes.stats_current.strong_signal_count++; // signal power above -3dBFS
+    }
+
+    if (0x1A == ch) {
+        p++;
+    }
+
+    for (j = 0; j < msgLen; j++) { // and the data
+        msg[j] = ch = *p++;
+        if (0x1A == ch) {
+            p++;
         }
+    }
 
-        if (msgLen == MODEAC_MSG_BYTES) { // ModeA or ModeC
-            if (remote) {
-                Modes.stats_current.remote_received_modeac++;
-            } else {
-                Modes.stats_current.demod_modeac++;
-            }
-            decodeModeAMessage(&mm, ((msg[0] << 8) | msg[1]));
+    int result = -10;
+    if (msgLen == MODEAC_MSG_BYTES) { // ModeA or ModeC
+        if (remote) {
+            Modes.stats_current.remote_received_modeac++;
         } else {
-            int result;
-            if (remote) {
-                Modes.stats_current.remote_received_modes++;
-            } else {
-                Modes.stats_current.demod_preambles++;
-            }
-            result = decodeModesMessage(&mm, msg);
-            if (result < 0) {
-                if (result == -1) {
-                    if (remote) {
-                        Modes.stats_current.remote_rejected_unknown_icao++;
-                    } else {
-                        Modes.stats_current.demod_rejected_unknown_icao++;
-                    }
+            Modes.stats_current.demod_modeac++;
+        }
+        decodeModeAMessage(mm, ((msg[0] << 8) | msg[1]));
+        result = 0;
+    } else {
+        if (remote) {
+            Modes.stats_current.remote_received_modes++;
+        } else {
+            Modes.stats_current.demod_preambles++;
+        }
+        result = decodeModesMessage(mm, msg);
+        if (result < 0) {
+            if (result == -1) {
+                if (remote) {
+                    Modes.stats_current.remote_rejected_unknown_icao++;
                 } else {
-                    if (remote) {
-                        Modes.stats_current.remote_rejected_bad++;
-                    } else {
-                        Modes.stats_current.demod_rejected_bad++;
-                    }
+                    Modes.stats_current.demod_rejected_unknown_icao++;
                 }
-                return 0;
             } else {
                 if (remote) {
-                    Modes.stats_current.remote_accepted[mm.correctedbits]++;
+                    Modes.stats_current.remote_rejected_bad++;
                 } else {
-                    Modes.stats_current.demod_accepted[mm.correctedbits]++;
+                    Modes.stats_current.demod_rejected_bad++;
                 }
             }
+        } else {
+            if (remote) {
+                Modes.stats_current.remote_accepted[mm->correctedbits]++;
+            } else {
+                Modes.stats_current.demod_accepted[mm->correctedbits]++;
+            }
         }
-
-        useModesMessage(&mm);
     }
+
+    if (result >= 0)
+        useModesMessage(mm);
+    free(mm);
     return (0);
 }
 //
@@ -2396,10 +2394,12 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
     struct stat fileinfo = {0};
 
     if (gzip > 7 && Modes.globe_history_dir) {
-        static int enable_hist;
         char tstring[100];
         time_t now = time(NULL) - GLOBE_OVERLAP;
         strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
+
+        /*
+        static int enable_hist;
         struct tm utc = *(gmtime(&now));
         //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
 
@@ -2411,10 +2411,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
 
         if (!enable_hist)
             goto no_copy;
-
-        if (stat(Modes.globe_history_dir, &fileinfo) == -1) {
-            mkdir(Modes.globe_history_dir, 0755);
-        }
+        */
 
         fd3 = open(tmppath, O_RDONLY);
 

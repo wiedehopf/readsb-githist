@@ -74,10 +74,12 @@ static void resize_trace(struct aircraft *a, uint64_t now);
 
 static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     static struct aircraft zeroAircraft;
-    struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof (*a));
+    //struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
+    struct aircraft *a = (struct aircraft *) malloc(sizeof(struct aircraft));
     int i;
 
     // Default everything to zero/NULL
+    memset(a, 0, sizeof (struct aircraft));
     *a = zeroAircraft;
 
     // Now initialise things that should not be 0/NULL to their defaults
@@ -93,7 +95,8 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     a->adsb_tah = HEADING_GROUND_TRACK;
 
     // Copy the first message so we can emit it later when a second message arrives.
-    a->first_message = *mm;
+    memcpy(&a->first_message, mm, sizeof(*mm));
+    memset(&a->first_message, 0, sizeof (*mm));
 
     if (Modes.json_globe_index) {
         if (pthread_mutex_init(&a->trace_mutex, NULL)) {
@@ -1531,7 +1534,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
-                if (a->trace_len > 0 && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 5 - (rand() % 60)) * 1000) {
+                if (a->pos_set && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 5 - (rand() % 60)) * 1000) {
                     a->trace_write = 1;
                     a->trace_full_write_ts = now; // hacky
                     a->trace_full_write = 9999; // rewrite full history file
@@ -1602,6 +1605,11 @@ static void cleanupAircraft(struct aircraft *a) {
         snprintf(fullpath, PATH_MAX, "%s/%s", Modes.json_dir, filename);
         fullpath[PATH_MAX - 1] = 0;
         unlink(fullpath);
+
+        if (Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
+            snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
+            unlink(filename);
+        }
 
         //fprintf(stderr, "unlink %06x: %s\n", a->addr, fullpath);
 
@@ -1752,8 +1760,10 @@ save_state:
         if (!trackDataValid(&a->track_valid))
             new->altitude |= (1<<25);
 
+        pthread_mutex_lock(&a->trace_mutex);
         (a->trace_len)++;
         a->trace_write = 1;
+        pthread_mutex_unlock(&a->trace_mutex);
         //fprintf(stderr, "Added to trace for %06X (%d).\n", a->addr, a->trace_len);
 
 no_save_state:
