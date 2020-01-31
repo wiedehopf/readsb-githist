@@ -65,6 +65,7 @@
 #include <poll.h>
 #include <zlib.h>
 #include <sys/sendfile.h>
+//#include <brotli/encode.h>
 
 
 //
@@ -2350,7 +2351,28 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
     umask(mask);
     fchmod(fd, 0644 & ~mask);
 
-    if (gzip) {
+    if (gzip < 0) {
+        /*
+        int brotliLvl = -gzip;
+        size_t outSize = len + 4096;
+        char *outBuf = malloc(outSize);
+        // BROTLI_MODE_TEXT  Compression mode for UTF-8 formatted text input. 
+        // BROTLI_MODE_GENERIC
+        int rc = BrotliEncoderCompress(
+                brotliLvl, 22, BROTLI_DEFAULT_MODE,
+                len, (uint8_t *) content, &outSize, (uint8_t *) outBuf);
+
+        if (rc == BROTLI_FALSE) {
+            goto error_1;
+        }
+
+        if (write(fd, outBuf, outSize) != (ssize_t) outSize)
+            goto error_1;
+
+        if (close(fd) < 0)
+            goto error_2;
+        */
+    } else if (gzip > 0) {
         gzFile gzfp = gzdopen(fd, "wb");
         if (!gzfp)
             goto error_1;
@@ -2376,7 +2398,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
     if (gzip > 7 && Modes.globe_history_dir) {
         static int enable_hist;
         char tstring[100];
-        time_t now = time(NULL) - (GLOBE_OVERLAP - 30);
+        time_t now = time(NULL) - GLOBE_OVERLAP;
         strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
         struct tm utc = *(gmtime(&now));
         //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
@@ -2407,8 +2429,10 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
 
 
         fstat(fd3, &fileinfo);
+        off_t old_size = fileinfo.st_size;
 
-        off_t new_size = sendfile(fd2, fd3, NULL, fileinfo.st_size);
+        off_t new_size = sendfile(fd2, fd3, NULL, old_size);
+
         if (close(fd2) < 0 || close(fd3) < 0) {
             goto no_copy;
         }
@@ -2434,13 +2458,9 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
 
 
         //fprintf(stderr, "%lu %s\n", new_size, tmppath2);
-        if (1 || stat(histPath, &fileinfo) || new_size > fileinfo.st_size) {
-            if (rename(tmppath2, histPath)) {
-                unlink(tmppath2);
-            }
-        } else {
-            unlink(tmppath2);
-        }
+        if (old_size == new_size)
+            rename(tmppath2, histPath);
+        unlink(tmppath2);
     }
 
 no_copy:

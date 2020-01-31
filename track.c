@@ -1531,7 +1531,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
-                if (a->trace_len > 0 && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 60) * 1000) {
+                if (a->trace_len > 0 && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 5 - (rand() % 60)) * 1000) {
                     a->trace_write = 1;
                     a->trace_full_write_ts = now; // hacky
                     a->trace_full_write = 9999; // rewrite full history file
@@ -1593,12 +1593,12 @@ static void cleanupAircraft(struct aircraft *a) {
         char filename[1024];
         char fullpath[PATH_MAX];
 
-        snprintf(filename, 1024, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        snprintf(filename, 1024, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
         snprintf(fullpath, PATH_MAX, "%s/%s", Modes.json_dir, filename);
         fullpath[PATH_MAX - 1] = 0;
         unlink(fullpath);
 
-        snprintf(filename, 1024, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+        snprintf(filename, 1024, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
         snprintf(fullpath, PATH_MAX, "%s/%s", Modes.json_dir, filename);
         fullpath[PATH_MAX - 1] = 0;
         unlink(fullpath);

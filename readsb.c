@@ -388,14 +388,14 @@ static void *jsonGlobeThreadEntryPoint(void *arg) {
         for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
             if (i % n_parts == part) {
                 snprintf(filename, 31, "globe_%04d.json", i);
-                writeJsonToFile(filename, generateAircraftJson(i));
+                writeJsonToGzip(filename, generateAircraftJson(i), 1);
             }
         }
         for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
             if (i % n_parts == part) {
                 if (globe_index_index(i) >= GLOBE_MIN_INDEX) {
                     snprintf(filename, 31, "globe_%04d.json", i);
-                    writeJsonToFile(filename, generateAircraftJson(i));
+                    writeJsonToGzip(filename, generateAircraftJson(i), 1);
                 }
             }
         }
@@ -484,15 +484,15 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
 
 
                 if (recent.len > 0) {
-                    snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                    snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
                     writeJsonToGzip(filename, recent, 1);
                 }
 
                 if (full.len > 0) {
-                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json.gz", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+                    snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
 
                     if (a->addr & MODES_NON_ICAO_ADDRESS)
-                        writeJsonToGzip(filename, full, 4);
+                        writeJsonToGzip(filename, full, 1);
                     else
                         writeJsonToGzip(filename, full, 9);
                 }
@@ -526,6 +526,8 @@ static void *decodeThreadEntryPoint(void *arg) {
      * clients without reading data from the RTL device.
      * This rules also in case a local Mode-S Beast is connected via USB.
      */
+
+    srand(mstime());
 
     if (Modes.sdr_type == SDR_NONE || Modes.sdr_type == SDR_MODESBEAST || Modes.sdr_type == SDR_GNS) {
         int64_t background_cpu_millis = 0;
