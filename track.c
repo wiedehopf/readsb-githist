@@ -1458,7 +1458,9 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
         uint64_t now = mstime() + 50;
 
         while (a) {
-            if ((now - a->seen) > TRACK_AIRCRAFT_TTL ||
+            if (
+                    (!a->pos_set && (now - a->seen) > TRACK_AIRCRAFT_NO_POS_TTL) ||
+                    (a->pos_set && (now - a->seen_pos) > TRACK_AIRCRAFT_TTL) ||
                     (a->messages == 1 && (now - a->seen) > TRACK_AIRCRAFT_ONEHIT_TTL) ||
                     (a->messages <= 10 && (now - a->seen) > HOURS_5) ||
                     ((a->addr & MODES_NON_ICAO_ADDRESS) && (now - a->seen) > TRACK_AIRCRAFT_NON_ICAO_TTL)
