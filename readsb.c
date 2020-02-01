@@ -1178,7 +1178,7 @@ static void *save_state(void *arg) {
                 continue;
             if (a->addr & MODES_NON_ICAO_ADDRESS)
                 continue;
-            if (a->messages < 3)
+            if (a->messages < 2)
                 continue;
 
             char filename[1024];
@@ -1256,6 +1256,9 @@ static void *load_state(void *arg) {
                 unlink(pathbuf);
                 continue;
             }
+
+            a->first_message = NULL;
+
             if (a->trace_len > 0) {
                 if ((uint32_t) a->trace_len != trace_size / sizeof(struct state)) {
                     fprintf(stderr, "trace_len mismatch\n");

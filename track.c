@@ -95,8 +95,8 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     a->adsb_tah = HEADING_GROUND_TRACK;
 
     // Copy the first message so we can emit it later when a second message arrives.
-    a->first_message = malloc(sizeof(*mm));
-    memcpy(a->first_message, mm, sizeof(*mm));
+    a->first_message = malloc(sizeof(struct modesMessage));
+    memcpy(a->first_message, mm, sizeof(struct modesMessage));
 
     if (Modes.json_globe_index) {
         if (pthread_mutex_init(&a->trace_mutex, NULL)) {
@@ -972,7 +972,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
     a->messages++;
 
-    if(a->messages == 3) {
+    if(a->messages == 3 && a->first_message) {
         free(a->first_message);
         a->first_message = NULL;
     }
