@@ -73,8 +73,7 @@ static void resize_trace(struct aircraft *a, uint64_t now);
 
 static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     //static struct aircraft zeroAircraft;
-    //struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
-    struct aircraft *a = (struct aircraft *) malloc(sizeof(struct aircraft));
+    struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
     int i;
 
     // Default everything to zero/NULL
@@ -973,7 +972,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
     a->messages++;
 
-    if(a->messages == 4) {
+    if(a->messages == 3) {
         free(a->first_message);
         a->first_message = NULL;
     }

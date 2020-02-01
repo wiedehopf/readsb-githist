@@ -1174,7 +1174,11 @@ static void *save_state(void *arg) {
         if (j % 8 != thread_number)
             continue;
         for (struct aircraft *a = Modes.aircrafts[j]; a; a = a->next) {
-            if (!a->pos_set && (a->addr & MODES_NON_ICAO_ADDRESS))
+            if (!a->pos_set)
+                continue;
+            if (a->addr & MODES_NON_ICAO_ADDRESS)
+                continue;
+            if (a->messages < 3)
                 continue;
 
             char filename[1024];
