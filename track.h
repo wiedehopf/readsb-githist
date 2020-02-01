@@ -79,6 +79,13 @@
 
 #define ALTITUDE_BARO_RELIABLE_MAX 20
 
+#define TRACK_STALE (15*1000)
+// 15 seconds
+#define TRACK_EXPIRE (70*1000)
+// 70 seconds
+#define TRACK_EXPIRE_JAERO (33*60*1000)
+// 33 minutes
+
 // data moves through three states:
 //  fresh: data is valid. Updates from a less reliable source are not accepted.
 //  stale: data is valid. Updates from a less reliable source are accepted.
@@ -86,15 +93,10 @@
 
 typedef struct
 {
-  uint64_t stale_interval; /* how long after an update until the data is stale */
-  uint64_t expire_interval; /* how long after an update until the data expires */
   uint64_t updated; /* when it arrived */
-  uint64_t stale; /* when it goes stale */
-  uint64_t expires; /* when it expires */
   uint64_t next_reduce_forward; /* when to next forward the data for reduced beast output */
+  uint32_t stale; /* if it's stale 1 / 0 */
   datasource_t source; /* where the data came from */
-  uint32_t padding;
-  uint64_t padding2;
 } data_validity;
 
 /* Structure representing one point in the aircraft trace */
@@ -274,17 +276,26 @@ extern uint32_t modeAC_match[4096];
 extern uint32_t modeAC_age[4096];
 
 /* is this bit of data valid? */
+static inline void
+updateValidity (data_validity *v, uint64_t now)
+{
+    if (v->source == SOURCE_INVALID)
+        return;
+    v->stale = (now > v->updated + TRACK_STALE);
+    if (v->source == SOURCE_JAERO) {
+        if (now > v->updated + TRACK_EXPIRE_JAERO)
+            v->source = SOURCE_INVALID;
+    } else {
+        if (now > v->updated + TRACK_EXPIRE)
+            v->source = SOURCE_INVALID;
+    }
+}
+
+/* is this bit of data valid? */
 static inline int
 trackDataValid (const data_validity *v)
 {
   return (v->source != SOURCE_INVALID);
-}
-
-/* is this bit of data fresh? */
-static inline int
-trackDataFresh (const data_validity *v, uint64_t now)
-{
-  return (v->source != SOURCE_INVALID && now < v->stale);
 }
 
 /* what's the age of this data, in milliseconds? */

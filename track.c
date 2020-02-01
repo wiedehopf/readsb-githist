@@ -63,7 +63,6 @@ uint32_t modeAC_age[4096];
 
 static void cleanupAircraft(struct aircraft *a);
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now);
-static void adjustExpire(struct aircraft *a, uint64_t timeout);
 static void position_bad(struct aircraft *a);
 static void resize_trace(struct aircraft *a, uint64_t now);
 
@@ -107,7 +106,7 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     }
 
     // initialize data validity ages
-    adjustExpire(a, 58);
+    //adjustExpire(a, 58);
 
     Modes.stats_current.unique_aircraft++;
 
@@ -140,13 +139,12 @@ static int accept_data(data_validity *d, datasource_t source, struct modesMessag
     if (receiveTime < d->updated)
         return 0;
 
-    if (source < d->source && receiveTime < d->stale)
+    if (source < d->source && receiveTime < d->updated + TRACK_STALE)
         return 0;
 
     d->source = source;
     d->updated = receiveTime;
-    d->stale = receiveTime + (d->stale_interval ? d->stale_interval : 60000);
-    d->expires = receiveTime + (d->expire_interval ? d->expire_interval : 70000);
+    d->stale = 0;
 
     if (receiveTime > d->next_reduce_forward && !mm->sbs_in) {
         if (mm->msgtype == 17 || reduce_often) {
@@ -165,7 +163,7 @@ static int accept_data(data_validity *d, datasource_t source, struct modesMessag
 
 // Given two datasources, produce a third datasource for data combined from them.
 
-static void combine_validity(data_validity *to, const data_validity *from1, const data_validity *from2) {
+static void combine_validity(data_validity *to, const data_validity *from1, const data_validity *from2, uint64_t now) {
     if (from1->source == SOURCE_INVALID) {
         *to = *from2;
         return;
@@ -178,14 +176,13 @@ static void combine_validity(data_validity *to, const data_validity *from1, cons
 
     to->source = (from1->source < from2->source) ? from1->source : from2->source; // the worse of the two input sources
     to->updated = (from1->updated > from2->updated) ? from1->updated : from2->updated; // the *later* of the two update times
-    to->stale = (from1->stale < from2->stale) ? from1->stale : from2->stale; // the earlier of the two stale times
-    to->expires = (from1->expires < from2->expires) ? from1->expires : from2->expires; // the earlier of the two expiry times
+    to->stale = (now > to->updated + TRACK_STALE);
 }
 
-static int compare_validity(const data_validity *lhs, const data_validity *rhs, uint64_t now) {
-    if (now < lhs->stale && lhs->source > rhs->source)
+static int compare_validity(const data_validity *lhs, const data_validity *rhs) {
+    if (!lhs->stale && lhs->source > rhs->source)
         return 1;
-    else if (now < rhs->stale && lhs->source < rhs->source)
+    else if (!rhs->stale && lhs->source < rhs->source)
         return -1;
     else if (lhs->updated > rhs->updated)
         return 1;
@@ -993,11 +990,13 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         break;
     }
 
+    /*
     if (mm->source == SOURCE_JAERO) {
         adjustExpire(a, 33 * 60);
     } else {
         adjustExpire(a, 58);
     }
+    */
 
     // assume version 0 until we see something else
     if (*message_version < 0) {
@@ -1198,7 +1197,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         // If our current state is UNCERTAIN, accept new data as normal
         // If our current state is certain but new data is not, only accept the uncertain state if the certain data has gone stale
         if (mm->airground != AG_UNCERTAIN ||
-                (mm->airground == AG_UNCERTAIN && !trackDataFresh(&a->airground_valid, now))) {
+                (mm->airground == AG_UNCERTAIN && now > a->airground_valid.updated + 60 * 1000)) {
             if (accept_data(&a->airground_valid, mm->source, mm, 0)) {
                 a->airground = mm->airground;
             }
@@ -1301,11 +1300,11 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     // Now handle derived data
 
     // derive geometric altitude if we have baro + delta
-    if (a->altitude_baro_reliable >= 3 && compare_validity(&a->altitude_baro_valid, &a->altitude_geom_valid, now) > 0 &&
-            compare_validity(&a->geom_delta_valid, &a->altitude_geom_valid, now) > 0) {
+    if (a->altitude_baro_reliable >= 3 && compare_validity(&a->altitude_baro_valid, &a->altitude_geom_valid) > 0 &&
+            compare_validity(&a->geom_delta_valid, &a->altitude_geom_valid) > 0) {
         // Baro and delta are both more recent than geometric, derive geometric from baro + delta
         a->altitude_geom = a->altitude_baro + a->geom_delta;
-        combine_validity(&a->altitude_geom_valid, &a->altitude_baro_valid, &a->geom_delta_valid);
+        combine_validity(&a->altitude_geom_valid, &a->altitude_baro_valid, &a->geom_delta_valid, now);
     }
 
     // If we've got a new cpr_odd or cpr_even
@@ -1448,14 +1447,16 @@ static void trackMatchAC(uint64_t now) {
 
 static void trackRemoveStaleAircraft(struct aircraft **freeList) {
     int with_pos = 0;
+
+    // +50 for small clock jumps, doesn't hurt in any case.
+    // shouldn't be an issue as this routine is not concurrent
+    // other threads stop operation before this section.
+    uint64_t now = mstime() + 50;
+
     for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
         struct aircraft *a = Modes.aircrafts[j];
         struct aircraft *prev = NULL;
 
-        // +50 for small clock jumps, doesn't hurt in any case.
-        // shouldn't be an issue as this routine is not concurrent
-        // other threads stop operation before this section.
-        uint64_t now = mstime() + 50;
 
         while (a) {
             if (
@@ -1487,41 +1488,39 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 *freeList = del;
             } else {
 
-#define EXPIRE(_f) do { if (a->_f##_valid.source != SOURCE_INVALID && now >= a->_f##_valid.expires) { a->_f##_valid.source = SOURCE_INVALID; } } while (0)
-                EXPIRE(callsign);
-                EXPIRE(altitude_baro);
-                EXPIRE(altitude_geom);
-                EXPIRE(geom_delta);
-                EXPIRE(gs);
-                EXPIRE(ias);
-                EXPIRE(tas);
-                EXPIRE(mach);
-                EXPIRE(track);
-                EXPIRE(track_rate);
-                EXPIRE(roll);
-                EXPIRE(mag_heading);
-                EXPIRE(true_heading);
-                EXPIRE(baro_rate);
-                EXPIRE(geom_rate);
-                EXPIRE(squawk);
-                EXPIRE(airground);
-                EXPIRE(nav_qnh);
-                EXPIRE(nav_altitude_mcp);
-                EXPIRE(nav_altitude_fms);
-                EXPIRE(nav_altitude_src);
-                EXPIRE(nav_heading);
-                EXPIRE(nav_modes);
-                EXPIRE(cpr_odd);
-                EXPIRE(cpr_even);
-                EXPIRE(position);
-                EXPIRE(nic_a);
-                EXPIRE(nic_c);
-                EXPIRE(nic_baro);
-                EXPIRE(nac_p);
-                EXPIRE(sil);
-                EXPIRE(gva);
-                EXPIRE(sda);
-#undef EXPIRE
+                updateValidity(&a->callsign_valid, now);
+                updateValidity(&a->altitude_baro_valid, now);
+                updateValidity(&a->altitude_geom_valid, now);
+                updateValidity(&a->geom_delta_valid, now);
+                updateValidity(&a->gs_valid, now);
+                updateValidity(&a->ias_valid, now);
+                updateValidity(&a->tas_valid, now);
+                updateValidity(&a->mach_valid, now);
+                updateValidity(&a->track_valid, now);
+                updateValidity(&a->track_rate_valid, now);
+                updateValidity(&a->roll_valid, now);
+                updateValidity(&a->mag_heading_valid, now);
+                updateValidity(&a->true_heading_valid, now);
+                updateValidity(&a->baro_rate_valid, now);
+                updateValidity(&a->geom_rate_valid, now);
+                updateValidity(&a->squawk_valid, now);
+                updateValidity(&a->airground_valid, now);
+                updateValidity(&a->nav_qnh_valid, now);
+                updateValidity(&a->nav_altitude_mcp_valid, now);
+                updateValidity(&a->nav_altitude_fms_valid, now);
+                updateValidity(&a->nav_altitude_src_valid, now);
+                updateValidity(&a->nav_heading_valid, now);
+                updateValidity(&a->nav_modes_valid, now);
+                updateValidity(&a->cpr_odd_valid, now);
+                updateValidity(&a->cpr_even_valid, now);
+                updateValidity(&a->position_valid, now);
+                updateValidity(&a->nic_a_valid, now);
+                updateValidity(&a->nic_c_valid, now);
+                updateValidity(&a->nic_baro_valid, now);
+                updateValidity(&a->nac_p_valid, now);
+                updateValidity(&a->sil_valid, now);
+                updateValidity(&a->gva_valid, now);
+                updateValidity(&a->sda_valid, now);
 
                 if (trackDataValid(&a->position_valid)) {
                     with_pos++;
@@ -1776,6 +1775,7 @@ no_save_state:
 
 }
 
+/*
 static void adjustExpire(struct aircraft *a, uint64_t timeout) {
 #define F(f,s,e) do { a->f##_valid.stale_interval = (s) * 1000; a->f##_valid.expire_interval = (e) * 1000; } while (0)
     F(callsign, 60,  timeout); // ADS-B or Comm-B
@@ -1814,6 +1814,7 @@ static void adjustExpire(struct aircraft *a, uint64_t timeout) {
     F(sda, 30, timeout); // ADS-B only
 #undef F
 }
+*/
 
 static void position_bad(struct aircraft *a) {
     Modes.stats_current.cpr_global_bad++;
