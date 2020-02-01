@@ -523,7 +523,9 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                         snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
 
                         int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                        write(fd, shadow, shadow_size);
+                        int res;
+                        res = write(fd, shadow, shadow_size);
+                        res++;
                         close(fd);
                     }
                     free(shadow);
@@ -1194,9 +1196,11 @@ static void *save_state(void *arg) {
             snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
 
             int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            write(fd, a, sizeof(struct aircraft));
+            int res;
+            res = write(fd, a, sizeof(struct aircraft));
             if (a->trace_len > 0)
-                write(fd, a->trace, a->trace_len * sizeof(struct state));
+                res = write(fd, a->trace, a->trace_len * sizeof(struct state));
+            res++;
             /*
                size_t shadow_size = 0;
                char *shadow = NULL;
@@ -1206,7 +1210,7 @@ static void *save_state(void *arg) {
                if (a->trace_len > 0)
                memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
 
-               write(fd, shadow, shadow_size);
+               res = write(fd, shadow, shadow_size);
                */
             close(fd);
         }
