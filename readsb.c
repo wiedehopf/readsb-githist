@@ -102,6 +102,8 @@ static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL};
 // ============================= Utility functions ==========================
 //
 static void log_with_timestamp(const char *format, ...) __attribute__ ((format(printf, 1, 2)));
+static void *load_state(void *arg);
+static void *save_state(void *arg);
 
 static void log_with_timestamp(const char *format, ...) {
     char timebuf[128];
@@ -1179,6 +1181,120 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 //
 //=========================================================================
 //
+static void *save_state(void *arg) {
+    int thread_number = *((int *) arg);
+    for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
+        if (j % 8 != thread_number)
+            continue;
+        for (struct aircraft *a = Modes.aircrafts[j]; a; a = a->next) {
+            if (!a->pos_set && (a->addr & MODES_NON_ICAO_ADDRESS))
+                continue;
+
+            char filename[1024];
+            snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
+
+            int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            write(fd, a, sizeof(struct aircraft));
+            if (a->trace_len > 0)
+                write(fd, a->trace, a->trace_len * sizeof(struct state));
+            /*
+               size_t shadow_size = 0;
+               char *shadow = NULL;
+               shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
+               shadow = malloc(shadow_size);
+               memcpy(shadow, a, sizeof(struct aircraft));
+               if (a->trace_len > 0)
+               memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
+
+               write(fd, shadow, shadow_size);
+               */
+            close(fd);
+        }
+    }
+    return NULL;
+}
+
+
+static void *load_state(void *arg) {
+    uint64_t now = mstime();
+    char pathbuf[PATH_MAX];
+    struct stat fileinfo = {0};
+    int thread_number = *((int *) arg);
+    for (int i = 0; i < 256; i++) {
+        if (i % 8 != thread_number)
+            continue;
+        snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
+
+        DIR *dp;
+        struct dirent *ep;
+
+        dp = opendir (pathbuf);
+        if (dp == NULL)
+            continue;
+
+        while ((ep = readdir (dp))) {
+            if (strlen(ep->d_name) != 6)
+                continue;
+            snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x/%s", Modes.globe_history_dir, i, ep->d_name);
+
+            int fd = open(pathbuf, O_RDONLY);
+
+            fstat(fd, &fileinfo);
+            off_t len = fileinfo.st_size;
+            int trace_size = len - sizeof(struct aircraft);
+            if (trace_size % sizeof(struct state) != 0) {
+                fprintf(stderr, "filesize mismatch\n");
+                close(fd);
+                unlink(pathbuf);
+                continue;
+            }
+            struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
+
+            if (read(fd, a, sizeof(struct aircraft)) != sizeof(struct aircraft)) {
+                fprintf(stderr, "read fail\n");
+                free(a);
+                close(fd);
+                unlink(pathbuf);
+                continue;
+            }
+            if (a->trace_len > 0) {
+                if ((uint32_t) a->trace_len != trace_size / sizeof(struct state)) {
+                    fprintf(stderr, "trace_len mismatch\n");
+                    free(a);
+                    close(fd);
+                    unlink(pathbuf);
+                    continue;
+                }
+                a->trace = malloc(a->trace_alloc * sizeof(struct state));
+                if (read(fd, a->trace, trace_size) != trace_size) {
+                    fprintf(stderr, "read trace fail\n");
+                    free(a->trace);
+                    free(a);
+                    close(fd);
+                    unlink(pathbuf);
+                    continue;
+                }
+                a->trace_full_write_ts = now - (GLOBE_OVERLAP - 65) * 1000;
+            }
+
+            if (pthread_mutex_init(&a->trace_mutex, NULL)) {
+                fprintf(stderr, "Unable to initialize trace mutex!\n");
+                exit(1);
+            }
+
+            Modes.stats_current.unique_aircraft++;
+
+            close(fd);
+            unlink(pathbuf);
+
+            a->next = Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS]; // .. and put it at the head of the list
+            Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS] = a;
+        }
+
+        closedir (dp);
+    }
+    return NULL;
+}
 
 int main(int argc, char **argv) {
     int j;
@@ -1236,81 +1352,15 @@ int main(int argc, char **argv) {
 
 
     if (Modes.globe_history_dir) {
-        uint64_t now = mstime();
         fprintf(stderr, "loading state .....\n");
-        char pathbuf[PATH_MAX];
-        struct stat fileinfo = {0};
-        snprintf(pathbuf, PATH_MAX, "%s/internal_state", Modes.globe_history_dir);
-        for (int i = 0; i < 256; i++) {
-            snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
-
-            DIR *dp;
-            struct dirent *ep;
-
-            dp = opendir (pathbuf);
-            if (dp == NULL)
-                continue;
-
-            while ((ep = readdir (dp))) {
-                if (strlen(ep->d_name) != 6)
-                    continue;
-                snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x/%s", Modes.globe_history_dir, i, ep->d_name);
-
-                int fd = open(pathbuf, O_RDONLY);
-
-                fstat(fd, &fileinfo);
-                off_t len = fileinfo.st_size;
-                int trace_size = len - sizeof(struct aircraft);
-                if (trace_size % sizeof(struct state) != 0) {
-                    fprintf(stderr, "filesize mismatch\n");
-                    close(fd);
-                    unlink(pathbuf);
-                    continue;
-                }
-                struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
-
-                if (read(fd, a, sizeof(struct aircraft)) != sizeof(struct aircraft)) {
-                    fprintf(stderr, "read fail\n");
-                    free(a);
-                    close(fd);
-                    unlink(pathbuf);
-                    continue;
-                }
-                if (a->trace_len > 0) {
-                    if ((uint32_t) a->trace_len != trace_size / sizeof(struct state)) {
-                        fprintf(stderr, "trace_len mismatch\n");
-                        free(a);
-                        close(fd);
-                        unlink(pathbuf);
-                        continue;
-                    }
-                    a->trace = malloc(a->trace_alloc * sizeof(struct state));
-                    if (read(fd, a->trace, trace_size) != trace_size) {
-                        fprintf(stderr, "read trace fail\n");
-                        free(a->trace);
-                        free(a);
-                        close(fd);
-                        unlink(pathbuf);
-                        continue;
-                    }
-                    a->trace_full_write_ts = now - (GLOBE_OVERLAP - 65) * 1000;
-                }
-
-                if (pthread_mutex_init(&a->trace_mutex, NULL)) {
-                    fprintf(stderr, "Unable to initialize trace mutex!\n");
-                    exit(1);
-                }
-
-                Modes.stats_current.unique_aircraft++;
-
-                close(fd);
-                unlink(pathbuf);
-
-                a->next = Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS]; // .. and put it at the head of the list
-                Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS] = a;
-            }
-
-            closedir (dp);
+        pthread_t threads[8];
+        int numbers[8];
+        for (int i = 0; i < 8; i++) {
+            numbers[i] = i;
+            pthread_create(&threads[i], NULL, load_state, &numbers[i]);
+        }
+        for (int i = 0; i < 8; i++) {
+            pthread_join(threads[i], NULL);
         }
         fprintf(stderr, " .......... done!\n");
     }
@@ -1354,33 +1404,15 @@ int main(int argc, char **argv) {
     if (Modes.globe_history_dir) {
         fprintf(stderr, "saving state .....\n");
 
-        for (int j = 0; j < AIRCRAFTS_BUCKETS; j++) {
-            for (struct aircraft *a = Modes.aircrafts[j]; a; a = a->next) {
-                if (!a->pos_set && (a->addr & MODES_NON_ICAO_ADDRESS))
-                    continue;
-
-                char filename[1024];
-                snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
-
-                int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                write(fd, a, sizeof(struct aircraft));
-                if (a->trace_len > 0)
-                    write(fd, a->trace, a->trace_len * sizeof(struct state));
-                /*
-                size_t shadow_size = 0;
-                char *shadow = NULL;
-                shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
-                shadow = malloc(shadow_size);
-                memcpy(shadow, a, sizeof(struct aircraft));
-                if (a->trace_len > 0)
-                    memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
-
-                write(fd, shadow, shadow_size);
-                */
-                close(fd);
-            }
+        pthread_t threads[8];
+        int numbers[8];
+        for (int i = 0; i < 8; i++) {
+            numbers[i] = i;
+            pthread_create(&threads[i], NULL, save_state, &numbers[i]);
         }
-
+        for (int i = 0; i < 8; i++) {
+            pthread_join(threads[i], NULL);
+        }
         fprintf(stderr, "............. done!\n");
     }
     // If --stats were given, print statistics
@@ -1398,4 +1430,5 @@ int main(int argc, char **argv) {
 }
 //
 //=========================================================================
+//
 //
