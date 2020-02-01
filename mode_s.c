@@ -2172,8 +2172,8 @@ void useModesMessage(struct modesMessage *mm) {
             // Suppress the first message. When we receive a second message,
             // emit the first two messages.
             if (a->messages == 2) {
-                if (!&a->first_message.sbs_in)
-                    modesQueueOutput(&a->first_message, a);
+                if (!a->first_message->sbs_in)
+                    modesQueueOutput(a->first_message, a);
             }
             modesQueueOutput(mm, a);
         }

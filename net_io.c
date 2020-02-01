@@ -1962,7 +1962,9 @@ struct char_buffer generateAircraftJson(int globe_index){
     struct char_buffer cb;
     uint64_t now = mstime();
     struct aircraft *a;
-    int buflen = 512*1024; // The initial buffer is resized as needed
+    int buflen = 6*1024*1024; // The initial buffer is resized as needed
+    if (globe_index >= 0)
+        buflen = 1024 * 1024;
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
     char *line_start;
     int first = 1;
@@ -2884,7 +2886,7 @@ struct char_buffer generateVRS(int part, int n_parts) {
     struct char_buffer cb;
     uint64_t now = mstime();
     struct aircraft *a;
-    int buflen = 256*1024; // The initial buffer is resized as needed
+    int buflen = 512*1024; // The initial buffer is resized as needed
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
     char *line_start;
     int first = 1;
@@ -3005,7 +3007,7 @@ retry:
                 p = safe_snprintf(p, end, ",\"Trt\":%d", 1);
 
 
-            p = safe_snprintf(p, end, ",\"Cmsgs\":%ld", a->messages);
+            p = safe_snprintf(p, end, ",\"Cmsgs\":%u", a->messages);
 
             p = safe_snprintf(p, end, "}");
 
@@ -3146,7 +3148,7 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     p = safe_snprintf(p, end, ",\"tisb\":");
     p = append_flags(p, end, a, SOURCE_TISB);
 
-    p = safe_snprintf(p, end, ",\"messages\":%ld,\"seen\":%.1f,\"rssi\":%.1f}",
+    p = safe_snprintf(p, end, ",\"messages\":%u,\"seen\":%.1f,\"rssi\":%.1f}",
             a->messages, (now < a->seen) ? 0 : ((now - a->seen) / 1000.0),
             10 * log10((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
                     a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));

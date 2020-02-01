@@ -72,14 +72,16 @@ static void resize_trace(struct aircraft *a, uint64_t now);
 //
 
 static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
-    static struct aircraft zeroAircraft;
+    //static struct aircraft zeroAircraft;
     //struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
     struct aircraft *a = (struct aircraft *) malloc(sizeof(struct aircraft));
     int i;
 
     // Default everything to zero/NULL
     memset(a, 0, sizeof (struct aircraft));
-    *a = zeroAircraft;
+    //*a = zeroAircraft;
+
+    a->size_struct_aircraft = sizeof(struct aircraft);
 
     // Now initialise things that should not be 0/NULL to their defaults
     a->addr = mm->addr;
@@ -94,8 +96,8 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     a->adsb_tah = HEADING_GROUND_TRACK;
 
     // Copy the first message so we can emit it later when a second message arrives.
-    memcpy(&a->first_message, mm, sizeof(*mm));
-    memset(&a->first_message, 0, sizeof (*mm));
+    a->first_message = malloc(sizeof(*mm));
+    memcpy(a->first_message, mm, sizeof(*mm));
 
     if (Modes.json_globe_index) {
         if (pthread_mutex_init(&a->trace_mutex, NULL)) {
@@ -964,7 +966,17 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         a->signalNext = (a->signalNext + 1) & 7;
     }
     a->seen = mm->sysTimestampMsg;
+
+    // reset to 100000 on overflow ... avoid any low message count checks
+    if (a->messages == UINT32_MAX)
+        a->messages = 100000;
+
     a->messages++;
+
+    if(a->messages == 4) {
+        free(a->first_message);
+        a->first_message = NULL;
+    }
 
     // update addrtype, we only ever go towards "more direct" types
     if (mm->addrtype < a->addrtype && now > 30 * 1000 +  a->position_valid.updated)  {
@@ -1617,6 +1629,8 @@ static void cleanupAircraft(struct aircraft *a) {
         pthread_mutex_unlock(&a->trace_mutex);
         pthread_mutex_destroy(&a->trace_mutex);
 
+        if (a->first_message)
+            free(a->first_message);
         if (a->trace) {
             free(a->trace);
         }

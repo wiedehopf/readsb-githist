@@ -217,15 +217,20 @@ static void modesInit(void) {
     // Allocate the various buffers used by Modes
     Modes.trailing_samples = (MODES_PREAMBLE_US + MODES_LONG_MSG_BITS + 16) * 1e-6 * Modes.sample_rate;
 
-    for (i = 0; i < MODES_MAG_BUFFERS; ++i) {
-        if ((Modes.mag_buffers[i].data = calloc(MODES_MAG_BUF_SAMPLES + Modes.trailing_samples, sizeof (uint16_t))) == NULL) {
-            fprintf(stderr, "Out of memory allocating magnitude buffer.\n");
-            exit(1);
-        }
+    if (Modes.sdr_type == SDR_NONE || Modes.sdr_type == SDR_MODESBEAST || Modes.sdr_type == SDR_GNS) {
+        Modes.net_only = 1;
+    }
+    if (!Modes.net_only) {
+        for (i = 0; i < MODES_MAG_BUFFERS; ++i) {
+            if ((Modes.mag_buffers[i].data = calloc(MODES_MAG_BUF_SAMPLES + Modes.trailing_samples, sizeof (uint16_t))) == NULL) {
+                fprintf(stderr, "Out of memory allocating magnitude buffer.\n");
+                exit(1);
+            }
 
-        Modes.mag_buffers[i].length = 0;
-        Modes.mag_buffers[i].dropped = 0;
-        Modes.mag_buffers[i].sampleTimestamp = 0;
+            Modes.mag_buffers[i].length = 0;
+            Modes.mag_buffers[i].dropped = 0;
+            Modes.mag_buffers[i].sampleTimestamp = 0;
+        }
     }
 
     // Validate the users Lat/Lon home location inputs
@@ -272,20 +277,6 @@ static void modesInit(void) {
         icaoFilterAdd(Modes.show_only);
 }
 
-// Set affinity of calling thread to specific core on a multi-core CPU
-static int thread_to_core(int core_id) {
-    int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-    if (core_id < 0 || core_id >= num_cores)
-        return EINVAL;
-
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_id, &cpuset);
-
-    pthread_t current_thread = pthread_self();
-    return pthread_setaffinity_np(current_thread, sizeof (cpu_set_t), &cpuset);
-}
-
 //
 //=========================================================================
 //
@@ -294,9 +285,6 @@ static int thread_to_core(int core_id) {
 //
 static void *readerThreadEntryPoint(void *arg) {
     MODES_NOTUSED(arg);
-
-    // Try sticking this thread to core 3
-    thread_to_core(3);
 
     sdrRun();
 
@@ -551,11 +539,6 @@ static void *decodeThreadEntryPoint(void *arg) {
 
     pthread_mutex_lock(&Modes.decodeThreadMutex);
 
-    /* On a multi-core CPU we run the main thread and reader thread on different cores.
-     * Try sticking the main thread to core 1
-     */
-    thread_to_core(1);
-
     /* If the user specifies --net-only, just run in order to serve network
      * clients without reading data from the RTL device.
      * This rules also in case a local Mode-S Beast is connected via USB.
@@ -563,7 +546,7 @@ static void *decodeThreadEntryPoint(void *arg) {
 
     srand(mstime());
 
-    if (Modes.sdr_type == SDR_NONE || Modes.sdr_type == SDR_MODESBEAST || Modes.sdr_type == SDR_GNS) {
+    if (Modes.net_only) {
         int64_t background_cpu_millis = 0;
         int64_t prev_cpu_millis = 0;
         struct timespec slp = {0, 20 * 1000 * 1000};
@@ -828,6 +811,8 @@ static void cleanup_and_exit(int code) {
                 pthread_mutex_unlock(&a->trace_mutex);
                 pthread_mutex_destroy(&a->trace_mutex);
 
+                if (a->first_message)
+                    free(a->first_message);
                 if (a->trace) {
                     free(a->trace);
                 }
@@ -1254,8 +1239,14 @@ static void *load_state(void *arg) {
             }
             struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
 
-            if (read(fd, a, sizeof(struct aircraft)) != sizeof(struct aircraft)) {
-                fprintf(stderr, "read fail\n");
+            if (read(fd, a, sizeof(struct aircraft)) != sizeof(struct aircraft) ||
+                    a->size_struct_aircraft != sizeof(struct aircraft)
+               ) {
+                if (a->size_struct_aircraft != sizeof(struct aircraft)) {
+                    fprintf(stderr, "sizeof(struct aircraft) has changed, unable to read state!\n");
+                } else {
+                    fprintf(stderr, "read fail\n");
+                }
                 free(a);
                 close(fd);
                 unlink(pathbuf);
@@ -1324,8 +1315,10 @@ int main(int argc, char **argv) {
 #endif
 
     // Initialization
-    //fprintf(stderr, "%lu\n", sizeof(struct aircraft) - sizeof(struct modesMessage));
+    //fprintf(stderr, "%lu\n", sizeof(struct modesMessage));
+    //fprintf(stderr, "%lu\n", sizeof(struct aircraft));
     //fprintf(stderr, "%lu\n", sizeof(pthread_mutex_t));
+    //fprintf(stderr, "%lu\n", 10000 * sizeof(struct aircraft));
     log_with_timestamp("%s %s starting up.", MODES_READSB_VARIANT, MODES_READSB_VERSION);
     modesInit();
 

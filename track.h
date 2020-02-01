@@ -97,6 +97,7 @@ typedef struct
   uint64_t next_reduce_forward; /* when to next forward the data for reduced beast output */
   uint32_t stale; /* if it's stale 1 / 0 */
   datasource_t source; /* where the data came from */
+  uint64_t padding;
 } data_validity;
 
 /* Structure representing one point in the aircraft trace */
@@ -113,13 +114,14 @@ struct state
 /* Structure used to describe the state of one tracked aircraft */
 struct aircraft
 {
-  struct aircraft * volatile next; // Next aircraft in our linked list (pointer is volatile)
+  struct aircraft *next; // Next aircraft in our linked list
   uint32_t addr; // ICAO address
   addrtype_t addrtype; // highest priority address type seen for this aircraft
   uint64_t seen; // Time (millis) at which the last packet was received
   uint64_t seen_pos; // Time (millis) at which the last position was received
 
-  long messages; // Number of Mode S messages received
+  uint32_t size_struct_aircraft; // size of this struct
+  uint32_t messages; // Number of Mode S messages received
   int destroy; // aircraft is being deleted
   int signalNext; // next index of signalLevel to use
   int altitude_baro; // Altitude (Baro)
@@ -263,7 +265,7 @@ struct aircraft
 
   // ----
 
-  struct modesMessage first_message; // A copy of the first message we received for this aircraft.
+  struct modesMessage *first_message; // A copy of the first message we received for this aircraft.
 
 } __attribute__ ((aligned (64)));
 
