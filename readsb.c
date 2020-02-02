@@ -480,7 +480,7 @@ static void *jsonTraceThreadEntryPoint(void *arg) {
                     full = generateTraceJson(a, 0);
 
                     a->trace_full_write = 0;
-                    a->trace_full_write_ts = now;
+                    a->trace_full_write_ts = now - (rand() % 120) * 1000;
 
                     if (Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
                         shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
@@ -543,8 +543,6 @@ static void *decodeThreadEntryPoint(void *arg) {
      * clients without reading data from the RTL device.
      * This rules also in case a local Mode-S Beast is connected via USB.
      */
-
-    srand(mstime());
 
     if (Modes.net_only) {
         int64_t background_cpu_millis = 0;
@@ -1276,7 +1274,8 @@ static void *load_state(void *arg) {
                     unlink(pathbuf);
                     continue;
                 }
-                a->trace_full_write_ts = now - (GLOBE_OVERLAP - 65) * 1000;
+                a->trace_full_write_ts = now - (GLOBE_OVERLAP - 30 - (rand() % 600)) * 1000;
+                a->trace_write = 1;
             }
 
             if (pthread_mutex_init(&a->trace_mutex, NULL)) {
@@ -1354,6 +1353,7 @@ int main(int argc, char **argv) {
 
     interactiveInit();
 
+    srand(mstime());
 
     if (Modes.globe_history_dir) {
         fprintf(stderr, "loading state .....\n");

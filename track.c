@@ -1546,9 +1546,8 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
-                if (a->pos_set && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 25 - (rand() % 60)) * 1000) {
+                if (a->pos_set && now > a->trace_full_write_ts + (GLOBE_OVERLAP - 30) * 1000) {
                     a->trace_write = 1;
-                    a->trace_full_write_ts = now; // hacky
                     a->trace_full_write = 9999; // rewrite full history file
                     resize_trace(a, now);
                 }
