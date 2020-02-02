@@ -178,7 +178,6 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     struct char_buffer recent;
     struct char_buffer full;
     struct char_buffer hist;
-    static uint32_t spread;
     size_t shadow_size = 0;
     char *shadow = NULL;
     char filename[PATH_MAX];
@@ -202,9 +201,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
         a->trace_full_write = 0;
         if (write_history == 1) {
-            spread--;
-            uint64_t offset = (spread % 9000) * 1000 / 100;
-            a->trace_next_fw = now - offset + (GLOBE_OVERLAP - 30) * 1000;
+            a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 8) * 1000;
             write_history = 2;
         }
     }
@@ -399,10 +396,13 @@ void *load_state(void *arg) {
                     continue;
                 }
                 a->trace_write = 1;
+                a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP / 4);
+                /*
                 if (a->trace_next_fw > now) {
                     uint64_t offset = a->trace_next_fw - now;
                     a->trace_next_fw -= (300 * (rand() % (offset / 1000 + 1)));
                 }
+                */
                 //a->trace_full_write = 9999; // rewrite full history file
             }
 
