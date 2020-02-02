@@ -156,8 +156,8 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start);
 struct char_buffer generateStatsJson ();
 struct char_buffer generateReceiverJson ();
 struct char_buffer generateHistoryJson ();
-void writeJsonToFile (const char *file, struct char_buffer cb);
-void writeJsonToGzip (const char *file, struct char_buffer cb, int gzip);
+void writeJsonToFile (const char* dir, const char *file, struct char_buffer cb);
+void writeJsonToGzip (const char* dir, const char *file, struct char_buffer cb, int gzip);
 struct char_buffer generateVRS(int part, int n_parts);
 void writeJsonToNet(struct net_writer *writer, struct char_buffer cb);
 

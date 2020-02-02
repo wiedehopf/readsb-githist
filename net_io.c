@@ -2322,24 +2322,17 @@ struct char_buffer generateReceiverJson() {
 }
 
 // Write JSON to file
-static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzip) {
+static inline void writeJsonTo (const char* dir, const char *file, struct char_buffer cb, int gzip) {
 #ifndef _WIN32
 
     char pathbuf[PATH_MAX];
-    char histPath[PATH_MAX-100];
     char tmppath[PATH_MAX];
-    char tmppath2[PATH_MAX];
-    int fd, fd2, fd3;
+    int fd;
     int len = cb.len;
     mode_t mask;
     char *content = cb.buffer;
 
-    if (!Modes.json_dir) {
-        free(content);
-        return;
-    }
-
-    snprintf(tmppath, PATH_MAX, "%s/%s.XXXXXX", Modes.json_dir, file);
+    snprintf(tmppath, PATH_MAX, "%s/%s.XXXXXX", dir, file);
     tmppath[PATH_MAX - 1] = 0;
     fd = mkstemp(tmppath);
     if (fd < 0) {
@@ -2393,77 +2386,7 @@ static inline void writeJsonTo (const char *file, struct char_buffer cb, int gzi
             goto error_2;
     }
 
-    struct stat fileinfo = {0};
-
-    if (gzip > 7 && Modes.globe_history_dir) {
-        char tstring[100];
-        time_t now = time(NULL) - GLOBE_OVERLAP;
-        strftime (tstring, 100, "%Y-%m-%d", gmtime(&now));
-
-        /*
-        static int enable_hist;
-        struct tm utc = *(gmtime(&now));
-        //fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
-
-        if (!enable_hist && utc.tm_hour == 0 && utc.tm_min < 10) {
-            enable_hist = 1;
-            fprintf(stderr, "%s %02d:%02d:%02d\n", tstring, utc.tm_hour, utc.tm_min, utc.tm_sec);
-            fprintf(stderr, "Starting to write globe_history\n");
-        }
-
-        if (!enable_hist)
-            goto no_copy;
-        */
-
-        fd3 = open(tmppath, O_RDONLY);
-
-        snprintf(tmppath2, PATH_MAX, "%s/XXXXXX", Modes.globe_history_dir);
-        tmppath2[PATH_MAX - 1] = 0;
-        fd2 = mkstemp(tmppath2);
-        if (fd2 < 0) {
-            close(fd3);
-            goto no_copy;
-        }
-        fchmod(fd2, 0644 & ~mask);
-
-
-        fstat(fd3, &fileinfo);
-        off_t old_size = fileinfo.st_size;
-
-        off_t new_size = sendfile(fd2, fd3, NULL, old_size);
-
-        if (close(fd2) < 0 || close(fd3) < 0) {
-            goto no_copy;
-        }
-
-        snprintf(histPath, PATH_MAX - 100, "%s/%s", Modes.globe_history_dir, tstring);
-        histPath[PATH_MAX - 101] = 0;
-
-        if (stat(histPath, &fileinfo) == -1) {
-            mkdir(histPath, 0755);
-
-            char pathbuf[PATH_MAX];
-            snprintf(pathbuf, PATH_MAX, "%s/traces", histPath);
-            histPath[PATH_MAX - 101] = 0;
-            mkdir(pathbuf, 0755);
-            for (int i = 0; i < 256; i++) {
-                snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", histPath, i);
-                mkdir(pathbuf, 0755);
-            }
-        }
-
-        snprintf(histPath, PATH_MAX - 100, "%s/%s/%s", Modes.globe_history_dir, tstring, file);
-        histPath[PATH_MAX - 101] = 0;
-
-
-        //fprintf(stderr, "%lu %s\n", new_size, tmppath2);
-        if (old_size == new_size)
-            rename(tmppath2, histPath);
-        unlink(tmppath2);
-    }
-
-no_copy:
-    snprintf(pathbuf, PATH_MAX, "%s/%s", Modes.json_dir, file);
+    snprintf(pathbuf, PATH_MAX, "%s/%s", dir, file);
     pathbuf[PATH_MAX - 1] = 0;
     rename(tmppath, pathbuf);
     free(content);
@@ -2478,12 +2401,12 @@ error_2:
 #endif
 }
 
-void writeJsonToFile (const char *file, struct char_buffer cb) {
-    writeJsonTo(file, cb, 0);
+void writeJsonToFile (const char* dir, const char *file, struct char_buffer cb) {
+    writeJsonTo(dir, file, cb, 0);
 }
 
-void writeJsonToGzip (const char *file, struct char_buffer cb, int gzip) {
-    writeJsonTo(file, cb, gzip);
+void writeJsonToGzip (const char* dir, const char *file, struct char_buffer cb, int gzip) {
+    writeJsonTo(dir, file, cb, gzip);
 }
 
 static void periodicReadFromClient(struct client *c) {

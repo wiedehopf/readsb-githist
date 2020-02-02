@@ -1660,7 +1660,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             a->trace = malloc(a->trace_alloc * sizeof(struct state));
             a->trace->timestamp = now;
             a->trace_write = 1;
-            a->trace_full_write_ts = 0; // rewrite full history file
+            a->trace_full_write = 9999; // rewrite full history file
 
             pthread_mutex_unlock(&a->trace_mutex);
         }
