@@ -144,7 +144,7 @@ struct aircraft
   int trace_write; // signal for writing the trace
   int trace_full_write; // signal for writing the complete trace
   int trace_alloc; // current number of allocated points
-  uint64_t trace_full_write_ts;
+  uint64_t trace_next_fw;
   unsigned pos_nic; // NIC of last computed position
   unsigned pos_rc; // Rc of last computed position
 

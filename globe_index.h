@@ -17,3 +17,4 @@ void init_globe_index(struct tile *s_tiles);
 void write_trace(struct aircraft *a, uint64_t now, int write_history);
 void *load_state(void *arg);
 void *save_state(void *arg);
+void *jsonTraceThreadEntryPoint(void *arg);

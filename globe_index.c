@@ -204,7 +204,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         if (write_history == 1) {
             spread--;
             uint64_t offset = (spread % 9000) * 1000 / 100;
-            a->trace_full_write_ts = now - offset;
+            a->trace_next_fw = now - offset + (GLOBE_OVERLAP - 30) * 1000;
             write_history = 2;
         }
     }
@@ -331,6 +331,7 @@ void *save_state(void *arg) {
 
 
 void *load_state(void *arg) {
+    uint64_t now = mstime();
     char pathbuf[PATH_MAX];
     struct stat fileinfo = {0};
     int thread_number = *((int *) arg);
@@ -398,6 +399,10 @@ void *load_state(void *arg) {
                     continue;
                 }
                 a->trace_write = 1;
+                if (a->trace_next_fw > now) {
+                    uint64_t offset = a->trace_next_fw - now;
+                    a->trace_next_fw -= (300 * (rand() % (offset / 1000 + 1)));
+                }
                 //a->trace_full_write = 9999; // rewrite full history file
             }
 
@@ -417,4 +422,76 @@ void *load_state(void *arg) {
         closedir (dp);
     }
     return NULL;
+}
+
+void *jsonTraceThreadEntryPoint(void *arg) {
+    MODES_NOTUSED(arg);
+
+    static int part;
+    int n_parts = 64; // power of 2
+
+    struct timespec slp = {0, 0};
+    // write each part every 25 seconds
+    uint64_t sleep = 25 * 1000 / n_parts;
+
+    slp.tv_sec =  (sleep / 1000);
+    slp.tv_nsec = (sleep % 1000) * 1000 * 1000;
+
+    pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
+
+    {
+        char pathbuf[PATH_MAX];
+        snprintf(pathbuf, PATH_MAX, "%s/traces", Modes.json_dir);
+        mkdir(pathbuf, 0755);
+        for (int i = 0; i < 256; i++) {
+            snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", Modes.json_dir, i);
+            mkdir(pathbuf, 0755);
+        }
+    }
+    if (Modes.globe_history_dir) {
+        char pathbuf[PATH_MAX];
+        mkdir(Modes.globe_history_dir, 0755);
+
+        snprintf(pathbuf, PATH_MAX, "%s/internal_state", Modes.globe_history_dir);
+        mkdir(pathbuf, 0755);
+
+        for (int i = 0; i < 256; i++) {
+            snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
+            mkdir(pathbuf, 0755);
+        }
+    }
+
+    while (!Modes.exit) {
+        struct aircraft *a;
+
+        pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+
+        nanosleep(&slp, NULL);
+
+        pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
+
+        int start = part * (AIRCRAFTS_BUCKETS / n_parts);
+        int end = (part + 1) * (AIRCRAFTS_BUCKETS / n_parts);
+
+        uint64_t now = mstime();
+
+        for (int j = start; j < end; j++) {
+            for (a = Modes.aircrafts[j]; a; a = a->next) {
+                if (a->trace_write)
+                    write_trace(a, now, 1);
+            }
+        }
+
+        part++;
+        part %= n_parts;
+
+    }
+
+    pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+
+#ifndef _WIN32
+    pthread_exit(NULL);
+#else
+    return NULL;
+#endif
 }
