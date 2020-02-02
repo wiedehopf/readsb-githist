@@ -381,7 +381,7 @@ void *load_state(void *arg) {
 
             a->first_message = NULL;
 
-            if (a->trace_len > 0) {
+            if (a->trace_alloc > 0) {
                 if ((uint32_t) a->trace_len != trace_size / sizeof(struct state)) {
                     fprintf(stderr, "trace_len mismatch\n");
                     free(a);
