@@ -248,7 +248,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         if (a->addr & MODES_NON_ICAO_ADDRESS)
             writeJsonToGzip(Modes.json_dir, filename, full, 1);
         else
-            writeJsonToGzip(Modes.json_dir, filename, full, 9);
+            writeJsonToGzip(Modes.json_dir, filename, full, 7);
     }
 
     if (hist.len > 0) {
