@@ -284,6 +284,7 @@ typedef enum {
 #define GLOBE_TRACE_SIZE 32768
 #define GLOBE_OVERLAP 1200
 #define GLOBE_STEP 128
+#define TRACE_THREADS 4
 
 // Include subheaders after all the #defines are in place
 
@@ -323,6 +324,10 @@ struct mag_buf
 #endif
 };
 
+
+// array for thread numbers
+int threadNumber[256];
+
 // Program global state
 
 struct
@@ -333,11 +338,13 @@ struct
   pthread_t decodeThread; // thread writing json
   pthread_t jsonThread; // thread writing json
   pthread_t jsonGlobeThread; // thread writing json
-  pthread_t jsonTraceThread; // thread writing icao trace jsons
   pthread_mutex_t decodeThreadMutex;
   pthread_mutex_t jsonThreadMutex;
   pthread_mutex_t jsonGlobeThreadMutex;
-  pthread_mutex_t jsonTraceThreadMutex;
+
+  pthread_t jsonTraceThread[TRACE_THREADS]; // thread writing icao trace jsons
+  pthread_mutex_t jsonTraceThreadMutex[TRACE_THREADS];
+
   unsigned first_free_buffer; // Entry in mag_buffers that will next be filled with input.
   unsigned first_filled_buffer; // Entry in mag_buffers that has valid data and will be demodulated next. If equal to next_free_buffer, there is no unprocessed data.
   unsigned trailing_samples; // extra trailing samples in magnitude buffers

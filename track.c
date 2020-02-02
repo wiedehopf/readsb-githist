@@ -1580,7 +1580,9 @@ void trackPeriodicUpdate() {
         // adding aircraft does not need to be done with locking:
         // the worst case is that the newly added aircraft is skipped as it's not yet
         // in the cache used by the json threads.
-        pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
+        for (int i = 0; i < TRACE_THREADS; i++) {
+            pthread_mutex_lock(&Modes.jsonTraceThreadMutex[i]);
+        }
         pthread_mutex_lock(&Modes.jsonThreadMutex);
         pthread_mutex_lock(&Modes.jsonGlobeThreadMutex);
         pthread_mutex_lock(&Modes.decodeThreadMutex);
@@ -1591,7 +1593,9 @@ void trackPeriodicUpdate() {
         pthread_mutex_unlock(&Modes.decodeThreadMutex);
         pthread_mutex_unlock(&Modes.jsonThreadMutex);
         pthread_mutex_unlock(&Modes.jsonGlobeThreadMutex);
-        pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+        for (int i = 0; i < TRACE_THREADS; i++) {
+            pthread_mutex_unlock(&Modes.jsonTraceThreadMutex[i]);
+        }
 
         cleanupAircraft(freeList);
     }

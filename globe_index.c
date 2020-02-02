@@ -199,11 +199,16 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
         full = generateTraceJson(a, 0);
 
-        a->trace_full_write = 0;
         if (write_history == 1) {
-            a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 8) * 1000;
+            if (a->trace_full_write == 0xc0ffee) {
+                a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 30);
+            } else {
+                a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 8) * 1000;
+            }
             write_history = 2;
         }
+        a->trace_full_write = 0;
+        //fprintf(stderr, "%06x\n", a->addr);
     }
     if (write_history == 2 && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
         shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
@@ -395,15 +400,10 @@ void *load_state(void *arg) {
                     unlink(pathbuf);
                     continue;
                 }
-                a->trace_write = 1;
-                a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP / 4);
-                /*
-                if (a->trace_next_fw > now) {
-                    uint64_t offset = a->trace_next_fw - now;
-                    a->trace_next_fw -= (300 * (rand() % (offset / 1000 + 1)));
-                }
-                */
-                //a->trace_full_write = 9999; // rewrite full history file
+                a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP / 20);
+                a->trace_full_write = 0xc0ffee; // rewrite full history file
+                //a->trace_write = 1;
+                //write_trace(a, now, 0);
             }
 
             if (pthread_mutex_init(&a->trace_mutex, NULL)) {
@@ -425,10 +425,15 @@ void *load_state(void *arg) {
 }
 
 void *jsonTraceThreadEntryPoint(void *arg) {
-    MODES_NOTUSED(arg);
+
+    int thread = * (int *) arg;
 
     static int part;
     int n_parts = 64; // power of 2
+
+    int thread_section_len = (AIRCRAFTS_BUCKETS / TRACE_THREADS);
+    int thread_start = thread * thread_section_len;
+    //int thread_end = thread_start + thread_section_len;
 
     struct timespec slp = {0, 0};
     // write each part every 25 seconds
@@ -437,41 +442,20 @@ void *jsonTraceThreadEntryPoint(void *arg) {
     slp.tv_sec =  (sleep / 1000);
     slp.tv_nsec = (sleep % 1000) * 1000 * 1000;
 
-    pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
-
-    {
-        char pathbuf[PATH_MAX];
-        snprintf(pathbuf, PATH_MAX, "%s/traces", Modes.json_dir);
-        mkdir(pathbuf, 0755);
-        for (int i = 0; i < 256; i++) {
-            snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", Modes.json_dir, i);
-            mkdir(pathbuf, 0755);
-        }
-    }
-    if (Modes.globe_history_dir) {
-        char pathbuf[PATH_MAX];
-        mkdir(Modes.globe_history_dir, 0755);
-
-        snprintf(pathbuf, PATH_MAX, "%s/internal_state", Modes.globe_history_dir);
-        mkdir(pathbuf, 0755);
-
-        for (int i = 0; i < 256; i++) {
-            snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
-            mkdir(pathbuf, 0755);
-        }
-    }
+    pthread_mutex_lock(&Modes.jsonTraceThreadMutex[thread]);
 
     while (!Modes.exit) {
         struct aircraft *a;
 
-        pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+        pthread_mutex_unlock(&Modes.jsonTraceThreadMutex[thread]);
 
         nanosleep(&slp, NULL);
 
-        pthread_mutex_lock(&Modes.jsonTraceThreadMutex);
+        pthread_mutex_lock(&Modes.jsonTraceThreadMutex[thread]);
 
-        int start = part * (AIRCRAFTS_BUCKETS / n_parts);
-        int end = (part + 1) * (AIRCRAFTS_BUCKETS / n_parts);
+        int section_len = thread_section_len / n_parts;
+        int start = thread_start + part * section_len;
+        int end = start + section_len;
 
         uint64_t now = mstime();
 
@@ -487,7 +471,7 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 
     }
 
-    pthread_mutex_unlock(&Modes.jsonTraceThreadMutex);
+    pthread_mutex_unlock(&Modes.jsonTraceThreadMutex[thread]);
 
 #ifndef _WIN32
     pthread_exit(NULL);

@@ -131,8 +131,11 @@ static void sigintHandler(int dummy) {
         pthread_kill(Modes.jsonThread, SIGUSR1);
     if (Modes.jsonGlobeThread)
         pthread_kill(Modes.jsonGlobeThread, SIGUSR1);
-    if (Modes.jsonTraceThread)
-        pthread_kill(Modes.jsonTraceThread, SIGUSR1);
+
+    for (int i = 0; i < TRACE_THREADS; i++) {
+        if (Modes.jsonTraceThread[i])
+            pthread_kill(Modes.jsonTraceThread[i], SIGUSR1);
+    }
     signal(SIGINT, SIG_DFL); // reset signal handler - bit extra safety
     Modes.exit = 1; // Signal to threads that we are done
     log_with_timestamp("Caught SIGINT, shutting down..\n");
@@ -146,8 +149,10 @@ static void sigtermHandler(int dummy) {
         pthread_kill(Modes.jsonThread, SIGUSR1);
     if (Modes.jsonGlobeThread)
         pthread_kill(Modes.jsonGlobeThread, SIGUSR1);
-    if (Modes.jsonTraceThread)
-        pthread_kill(Modes.jsonTraceThread, SIGUSR1);
+    for (int i = 0; i < TRACE_THREADS; i++) {
+        if (Modes.jsonTraceThread[i])
+            pthread_kill(Modes.jsonTraceThread[i], SIGUSR1);
+    }
     signal(SIGTERM, SIG_DFL); // reset signal handler - bit extra safety
     Modes.exit = 1; // Signal to threads that we are done
     log_with_timestamp("Caught SIGTERM, shutting down..\n");
@@ -165,6 +170,10 @@ void receiverPositionChanged(float lat, float lon, float alt) {
 static void modesInitConfig(void) {
     // Default everything to zero/NULL
     memset(&Modes, 0, sizeof (Modes));
+
+    for (int i = 0; i < 256; i++) {
+        threadNumber[i] = i;
+    }
 
     // Now initialise things that should not be 0/NULL to their defaults
     Modes.gain = MODES_MAX_GAIN;
@@ -208,7 +217,9 @@ static void modesInit(void) {
     pthread_mutex_init(&Modes.decodeThreadMutex, NULL);
     pthread_mutex_init(&Modes.jsonThreadMutex, NULL);
     pthread_mutex_init(&Modes.jsonGlobeThreadMutex, NULL);
-    pthread_mutex_init(&Modes.jsonTraceThreadMutex, NULL);
+    for (int i = 0; i < TRACE_THREADS; i++) {
+        pthread_mutex_init(&Modes.jsonTraceThreadMutex[i], NULL);
+    }
 
     Modes.sample_rate = (double)2400000.0;
 
@@ -526,7 +537,9 @@ static void *decodeThreadEntryPoint(void *arg) {
         pthread_mutex_destroy(&Modes.decodeThreadMutex);
         pthread_mutex_destroy(&Modes.jsonThreadMutex);
         pthread_mutex_destroy(&Modes.jsonGlobeThreadMutex);
-        pthread_mutex_destroy(&Modes.jsonTraceThreadMutex);
+        for (int i = 0; i < TRACE_THREADS; i++) {
+            pthread_mutex_destroy(&Modes.jsonTraceThreadMutex[i]);
+        }
     }
 
     pthread_mutex_unlock(&Modes.decodeThreadMutex);
@@ -654,6 +667,7 @@ static void cleanup_and_exit(int code) {
      * otherwise points to const string
      */
     free(Modes.json_dir);
+    free(Modes.globe_history_dir);
     free(Modes.net_bind_address);
     free(Modes.net_input_beast_ports);
     free(Modes.net_output_beast_ports);
@@ -1115,7 +1129,29 @@ int main(int argc, char **argv) {
         if (Modes.json_globe_index) {
             pthread_create(&Modes.jsonGlobeThread, NULL, jsonGlobeThreadEntryPoint, NULL);
 
-            pthread_create(&Modes.jsonTraceThread, NULL, jsonTraceThreadEntryPoint, NULL);
+            char pathbuf[PATH_MAX];
+            snprintf(pathbuf, PATH_MAX, "%s/traces", Modes.json_dir);
+            mkdir(pathbuf, 0755);
+            for (int i = 0; i < 256; i++) {
+                snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", Modes.json_dir, i);
+                mkdir(pathbuf, 0755);
+            }
+            if (Modes.globe_history_dir) {
+                char pathbuf[PATH_MAX];
+                mkdir(Modes.globe_history_dir, 0755);
+
+                snprintf(pathbuf, PATH_MAX, "%s/internal_state", Modes.globe_history_dir);
+                mkdir(pathbuf, 0755);
+
+                for (int i = 0; i < 256; i++) {
+                    snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
+                    mkdir(pathbuf, 0755);
+                }
+            }
+
+            for (int i = 0; i < TRACE_THREADS; i++) {
+                pthread_create(&Modes.jsonTraceThread[i], NULL, jsonTraceThreadEntryPoint, &threadNumber[i]);
+            }
         }
     }
 
@@ -1137,7 +1173,9 @@ int main(int argc, char **argv) {
 
         if (Modes.json_globe_index) {
             pthread_join(Modes.jsonGlobeThread, NULL); // Wait on json writer thread exit
-            pthread_join(Modes.jsonTraceThread, NULL); // Wait on json writer thread exit
+            for (int i = 0; i < TRACE_THREADS; i++) {
+                pthread_join(Modes.jsonTraceThread[i], NULL); // Wait on json writer thread exit
+            }
         }
     }
 

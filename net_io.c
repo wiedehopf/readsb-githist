@@ -507,6 +507,10 @@ void modesInitNet(void) {
         jaero[4] = '9';
         sbs_out_jaero = serviceInit("Basestation TCP output JAERO", &Modes.sbs_out_jaero, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
         serviceListen(sbs_out_jaero, Modes.net_bind_address, jaero);
+
+        free(mlat);
+        free(prio);
+        free(jaero);
     }
 
     sbs_in = serviceInit("Basestation TCP input", NULL, NULL, READ_MODE_ASCII, "\n",  decodeSbsLine);
@@ -528,6 +532,10 @@ void modesInitNet(void) {
         char *jaero = strdup(Modes.net_input_sbs_ports);
         jaero[4] = '9';
         serviceListen(sbs_in_jaero, Modes.net_bind_address, jaero);
+
+        free(mlat);
+        free(prio);
+        free(jaero);
     }
 
     raw_in = serviceInit("Raw TCP input", NULL, NULL, READ_MODE_ASCII, "\n", decodeHexMessage);
