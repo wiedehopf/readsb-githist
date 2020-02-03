@@ -281,17 +281,18 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         filename[PATH_MAX - 101] = 0;
         writeJsonToGzip(Modes.globe_history_dir, filename, hist, 9);
 
-        if (shadow && shadow_size > 0) {
-            snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
-
-            int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            int res;
-            res = write(fd, shadow, shadow_size);
-            res++;
-            close(fd);
-        }
-        free(shadow);
     }
+
+    if (shadow && shadow_size > 0) {
+        snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
+
+        int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int res;
+        res = write(fd, shadow, shadow_size);
+        res++;
+        close(fd);
+    }
+    free(shadow);
 }
 
 void *save_state(void *arg) {
