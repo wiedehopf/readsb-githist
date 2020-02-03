@@ -191,7 +191,6 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     pthread_mutex_lock(&a->trace_mutex);
 
     a->trace_write = 0;
-    a->trace_full_write++;
 
     recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
 
@@ -201,7 +200,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
         if (write_history == 1) {
             if (a->trace_full_write == 0xc0ffee) {
-                a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 30);
+                a->trace_next_fw = now + 1000 * ((rand() % GLOBE_OVERLAP - 30) + 90);
             } else {
                 a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 8) * 1000;
             }
@@ -210,6 +209,9 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         a->trace_full_write = 0;
         //fprintf(stderr, "%06x\n", a->addr);
     }
+
+    a->trace_full_write++;
+
     if (write_history == 2 && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
         shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
         shadow = malloc(shadow_size);
@@ -337,6 +339,7 @@ void *load_state(void *arg) {
     char pathbuf[PATH_MAX];
     struct stat fileinfo = {0};
     int thread_number = *((int *) arg);
+    srand(now + thread_number);
     for (int i = 0; i < 256; i++) {
         if (i % 8 != thread_number)
             continue;
@@ -402,7 +405,7 @@ void *load_state(void *arg) {
                 }
                 a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP / 20);
                 a->trace_full_write = 0xc0ffee; // rewrite full history file
-                //a->trace_write = 1;
+                a->trace_write = 1;
                 //write_trace(a, now, 0);
             }
 
@@ -427,6 +430,8 @@ void *load_state(void *arg) {
 void *jsonTraceThreadEntryPoint(void *arg) {
 
     int thread = * (int *) arg;
+
+    srand(thread);
 
     static int part;
     int n_parts = 64; // power of 2

@@ -1623,7 +1623,10 @@ static void cleanupAircraft(struct aircraft *a) {
 
         if (Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
             snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
-            unlink(filename);
+            if (unlink(filename)) {
+                //perror("unlink internal_state");
+                //fprintf(stderr, "unlink %06x: %s\n", a->addr, filename);
+            }
         }
 
         //fprintf(stderr, "unlink %06x: %s\n", a->addr, fullpath);
