@@ -405,7 +405,7 @@ void *load_state(void *arg) {
                 }
                 a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP / 20);
                 a->trace_full_write = 0xc0ffee; // rewrite full history file
-                a->trace_write = 1;
+                //a->trace_write = 1;
                 //write_trace(a, now, 0);
             }
 
@@ -433,12 +433,14 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 
     srand(thread);
 
-    static int part;
+    int part = 0;
     int n_parts = 64; // power of 2
 
     int thread_section_len = (AIRCRAFTS_BUCKETS / TRACE_THREADS);
     int thread_start = thread * thread_section_len;
     //int thread_end = thread_start + thread_section_len;
+    //fprintf(stderr, "%d %d\n", thread_start, thread_end);
+    int section_len = thread_section_len / n_parts;
 
     struct timespec slp = {0, 0};
     // write each part every 25 seconds
@@ -458,9 +460,10 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 
         pthread_mutex_lock(&Modes.jsonTraceThreadMutex[thread]);
 
-        int section_len = thread_section_len / n_parts;
         int start = thread_start + part * section_len;
         int end = start + section_len;
+
+        //fprintf(stderr, "%d %d %d\n", part, start, end);
 
         uint64_t now = mstime();
 
@@ -473,7 +476,6 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 
         part++;
         part %= n_parts;
-
     }
 
     pthread_mutex_unlock(&Modes.jsonTraceThreadMutex[thread]);
