@@ -194,7 +194,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
     recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
 
-    if (a->trace_full_write > 122) {
+    if (a->trace_full_write > 122 || now > a->trace_next_fw) {
 
         full = generateTraceJson(a, 0);
 

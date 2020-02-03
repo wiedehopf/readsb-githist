@@ -1548,7 +1548,6 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
 
                 if (a->pos_set && now > a->trace_next_fw) {
                     a->trace_write = 1;
-                    a->trace_full_write = 9999; // rewrite full history file
                     resize_trace(a, now);
                 }
 
