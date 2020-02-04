@@ -200,27 +200,29 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
         full = generateTraceJson(a, 0);
 
-        if (write_history == 1) {
-            if (a->trace_full_write == 0xc0ffee) {
-                a->trace_next_fw = now + 1000 * ((rand() % GLOBE_OVERLAP - 30) + 90);
-            } else {
-                a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 8) * 1000;
-            }
+        if (a->trace_full_write == 0xc0ffee) {
+            a->trace_next_fw = now + 1000 * ((rand() % GLOBE_OVERLAP - 30) + 90);
+        } else {
+            a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 8) * 1000;
+        }
+
+        if (write_history && a->trace_full_write > 2) {
             write_history = 2;
         }
+
         a->trace_full_write = 0;
         //fprintf(stderr, "%06x\n", a->addr);
     }
 
     a->trace_full_write++;
 
-    if (a->trace_len > 0 && write_history == 2 && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
+    if (a->trace_len > 0 && write_history == 2 &&
+            Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
         // write to permanent storage
         shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
         shadow = malloc(shadow_size);
         memcpy(shadow, a, sizeof(struct aircraft));
-        if (a->trace_len > 0)
-            memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
+        memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
 
         struct tm *utc = gmtime(&nowish);
         utc->tm_sec = 0;
