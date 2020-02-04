@@ -256,15 +256,20 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     }
 
     if (hist.len > 0) {
-        struct stat fileinfo = {0};
+
+        static int day; // STATIC !!!!!!!!!!
+
         char tstring[100];
+        struct tm *utc = gmtime(&nowish);
+        strftime (tstring, 100, "%Y-%m-%d", utc);
 
-        strftime (tstring, 100, "%Y-%m-%d", gmtime(&nowish));
+        if (utc->tm_mday != day) {
 
-        snprintf(filename, PATH_MAX - 200, "%s/%s", Modes.globe_history_dir, tstring);
-        filename[PATH_MAX - 201] = 0;
+            day = utc->tm_mday;
 
-        if (stat(filename, &fileinfo) == -1) {
+            snprintf(filename, PATH_MAX - 200, "%s/%s", Modes.globe_history_dir, tstring);
+            filename[PATH_MAX - 201] = 0;
+
             mkdir(filename, 0755);
 
             char pathbuf[PATH_MAX+20];

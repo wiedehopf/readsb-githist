@@ -2337,20 +2337,15 @@ static inline void writeJsonTo (const char* dir, const char *file, struct char_b
     char tmppath[PATH_MAX];
     int fd;
     int len = cb.len;
-    mode_t mask;
     char *content = cb.buffer;
 
-    snprintf(tmppath, PATH_MAX, "%s/%s.XXXXXX", dir, file);
+    snprintf(tmppath, PATH_MAX, "%s/%s.%d", dir, file, rand());
     tmppath[PATH_MAX - 1] = 0;
-    fd = mkstemp(tmppath);
+    fd = open(tmppath, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
         free(content);
         return;
     }
-
-    mask = umask(0);
-    umask(mask);
-    fchmod(fd, 0644 & ~mask);
 
     if (gzip < 0) {
         /*
