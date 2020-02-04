@@ -198,7 +198,120 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     if (a->trace_full_write > 122 || now > a->trace_next_fw) {
         // write full trace to /run
 
-        full = generateTraceJson(a, 0);
+        int start = 0;
+        if (a->trace_len > 200) {
+            int high = 0;
+            int low = 100000;
+
+            for (int i = 0; i < a->trace_len; i++) {
+                int32_t altitude = a->trace[i].altitude;
+                int on_ground = altitude & (1<<22);
+                int alt_unknown = altitude & (1<<23);
+
+                if (alt_unknown)
+                    continue;
+
+                altitude = altitude & ((1<<21) - 1);
+                altitude -= 100000; // restore actual altitude
+
+                if (on_ground)
+                    altitude = 0;
+
+                if (altitude > high) {
+                    high = altitude;
+                }
+                if (altitude < low) {
+                    low = altitude;
+                }
+            }
+
+            int threshold = (high - low) * 1/2;
+
+            if (threshold > 10000)
+                threshold = 10000;
+
+            high = 0;
+            low = 100000;
+
+            uint64_t major_climb = 0;
+            uint64_t major_descent = 0;
+            uint64_t last_high = 0;
+            uint64_t last_low = 0;
+
+            for (int i = a->trace_len - 1; i >= 1; i--) {
+                struct state state = a->trace[i];
+
+                int32_t altitude = state.altitude;
+                //int stale = altitude & (1<<21);
+                int on_ground = altitude & (1<<22);
+                int alt_unknown = altitude & (1<<23);
+                //int track_unknown = altitude & (1<<24);
+                //int gs_unknown = altitude & (1<<25);
+                //
+                altitude = altitude & ((1<<21) - 1);
+                altitude -= 100000; // restore actual altitude
+
+                if (on_ground)
+                    altitude = 0;
+
+                if (alt_unknown || on_ground ||
+                    state.timestamp > a->trace[i-1].timestamp + 10 * 60 * 1000) {
+                    if (abs(low - altitude) < 1000) {
+                        last_low = state.timestamp;
+                    }
+                }
+
+                if (alt_unknown)
+                    continue;
+
+                if (altitude >= high) {
+                    high = altitude;
+                    last_high = state.timestamp;
+                }
+                if (altitude <= low) {
+                    low = altitude;
+                    last_low = state.timestamp;
+                }
+                if (high - low > threshold) {
+                    if (last_high > last_low) {
+                        major_climb = last_low + 60 * 1000;
+                        //if (a->addr == 0x485875)
+                        //    fprintf(stderr, "descent: %d %lu\n", low, major_climb);
+                        high = low + threshold * 2 / 3;
+                    }
+                    if (last_high < last_low) {
+                        major_descent = last_low;
+                        //if (a->addr == 0x485875)
+                        //    fprintf(stderr, "climb: %d %lu\n", low, major_descent);
+                        low = high - threshold * 2 / 3;
+                    }
+                }
+                if (major_climb && major_descent &&
+                        major_climb > major_descent + 30 * 1000
+                   ) {
+                    for (int i = 0; i < a->trace_len; i++) {
+                        struct state *state = &a->trace[i];
+                        if (state->timestamp >= last_low) {
+                            state->altitude |= (1<<26);
+                            // set leg marker
+                            break;
+                        }
+                    }
+                    major_climb = 0;
+                    major_descent = 0;
+                    //if (a->addr == 0x485875)
+                    //    fprintf(stderr, "leg\n");
+                }
+            }
+            /*
+            if (a->trace_len - start < 142)
+                start = a->trace_len - 142;
+            if (start < 0)
+                start = 0;
+            */
+        }
+
+        full = generateTraceJson(a, start);
 
         if (a->trace_full_write == 0xc0ffee) {
             a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 30);

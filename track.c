@@ -1679,6 +1679,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         int on_ground = 0;
         float turn_density = 5;
         float track = a->track;
+        struct state *last = NULL;
 
         if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND) {
             on_ground = 1;
@@ -1689,7 +1690,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             goto save_state;
 
 
-        struct state *last = &(trace[a->trace_len-1]);
+        last = &(trace[a->trace_len-1]);
         float track_diff = fabs(track - last->track / 10.0);
 
         int32_t last_alt = last->altitude & ((1<<21) - 1);
@@ -1764,7 +1765,7 @@ save_state:
             new->altitude |= (1<<23);
         }
 
-        if (now > a->seen_pos + 15 * 1000)
+        if (now > a->seen_pos + 15 * 1000 || (last && now > last->timestamp + 500 * 1000))
             new->altitude |= (1<<21);
 
         if (on_ground)
