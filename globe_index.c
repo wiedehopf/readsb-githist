@@ -193,8 +193,10 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     a->trace_write = 0;
 
     recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
+    // write recent trace to /run
 
     if (a->trace_full_write > 122 || now > a->trace_next_fw) {
+        // write full trace to /run
 
         full = generateTraceJson(a, 0);
 
@@ -212,7 +214,8 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
     a->trace_full_write++;
 
-    if (write_history == 2 && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
+    if (a->trace_len > 0 && write_history == 2 && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
+        // write to permanent storage
         shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
         shadow = malloc(shadow_size);
         memcpy(shadow, a, sizeof(struct aircraft));
