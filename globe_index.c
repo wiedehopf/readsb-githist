@@ -248,16 +248,19 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
     if (recent.len > 0) {
         snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-        writeJsonToGzip(Modes.json_dir, filename, recent, 1);
+        writeJsonToGzip(Modes.json_dir, filename, recent, 3);
+        free(recent.buffer);
     }
 
     if (full.len > 0) {
         snprintf(filename, 256, "traces/%02x/trace_full_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
 
         if (a->addr & MODES_NON_ICAO_ADDRESS)
-            writeJsonToGzip(Modes.json_dir, filename, full, 1);
+            writeJsonToGzip(Modes.json_dir, filename, full, 3);
         else
             writeJsonToGzip(Modes.json_dir, filename, full, 7);
+
+        free(full.buffer);
     }
 
     if (hist.len > 0) {
@@ -291,6 +294,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         filename[PATH_MAX - 101] = 0;
         writeJsonToGzip(Modes.globe_history_dir, filename, hist, 9);
 
+        free(hist.buffer);
     }
 
     if (shadow && shadow_size > 0) {

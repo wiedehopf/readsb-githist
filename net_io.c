@@ -2343,7 +2343,8 @@ static inline void writeJsonTo (const char* dir, const char *file, struct char_b
     tmppath[PATH_MAX - 1] = 0;
     fd = open(tmppath, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
-        free(content);
+        if (!gzip)
+            free(content);
         return;
     }
 
@@ -2392,14 +2393,16 @@ static inline void writeJsonTo (const char* dir, const char *file, struct char_b
     snprintf(pathbuf, PATH_MAX, "%s/%s", dir, file);
     pathbuf[PATH_MAX - 1] = 0;
     rename(tmppath, pathbuf);
-    free(content);
+    if (!gzip)
+        free(content);
     return;
 
 error_1:
     close(fd);
 error_2:
     unlink(tmppath);
-    free(content);
+    if (!gzip)
+        free(content);
     return;
 #endif
 }

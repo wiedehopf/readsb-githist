@@ -315,8 +315,11 @@ static void *jsonThreadEntryPoint(void *arg) {
     MODES_NOTUSED(arg);
 
     struct timespec slp = {0, 0};
-    slp.tv_sec =  (Modes.json_interval / 1000);
-    slp.tv_nsec = (Modes.json_interval % 1000) * 1000 * 1000;
+    uint64_t interval = Modes.json_interval;
+    if (interval > 994)
+        interval = 994;
+    slp.tv_sec =  (interval / 1000);
+    slp.tv_nsec = (interval % 1000) * 1000 * 1000;
 
     pthread_mutex_lock(&Modes.jsonThreadMutex);
 
@@ -331,9 +334,12 @@ static void *jsonThreadEntryPoint(void *arg) {
         pthread_mutex_lock(&Modes.jsonThreadMutex);
 
         uint64_t now = mstime();
-        writeJsonToFile(Modes.json_dir, "aircraft.json", generateAircraftJson(-1));
 
-        if (ALL_JSON && (ALL_JSON || !Modes.json_globe_index) && now >= next_history) {
+        struct char_buffer cb = generateAircraftJson(-1);
+        writeJsonToGzip(Modes.json_dir, "aircraft.json.gz", cb, 3);
+        writeJsonToFile(Modes.json_dir, "aircraft.json", cb);
+
+        if ((ALL_JSON || !Modes.json_globe_index) && now >= next_history) {
             char filebuf[PATH_MAX];
 
             snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
@@ -386,14 +392,18 @@ static void *jsonGlobeThreadEntryPoint(void *arg) {
         for (int i = 0; i < GLOBE_SPECIAL_INDEX; i++) {
             if (i % n_parts == part) {
                 snprintf(filename, 31, "globe_%04d.json", i);
-                writeJsonToGzip(Modes.json_dir, filename, generateAircraftJson(i), 1);
+                struct char_buffer cb = generateAircraftJson(i);
+                writeJsonToGzip(Modes.json_dir, filename, cb, 3);
+                free(cb.buffer);
             }
         }
         for (int i = GLOBE_MIN_INDEX; i <= GLOBE_MAX_INDEX; i++) {
             if (i % n_parts == part) {
                 if (globe_index_index(i) >= GLOBE_MIN_INDEX) {
                     snprintf(filename, 31, "globe_%04d.json", i);
-                    writeJsonToGzip(Modes.json_dir, filename, generateAircraftJson(i), 1);
+                    struct char_buffer cb = generateAircraftJson(i);
+                    writeJsonToGzip(Modes.json_dir, filename, cb, 3);
+                    free(cb.buffer);
                 }
             }
         }
@@ -1123,7 +1133,7 @@ int main(int argc, char **argv) {
 
     if (Modes.json_dir) {
 
-        if (ALL_JSON || !Modes.json_globe_index)
+        //if (ALL_JSON || !Modes.json_globe_index)
             pthread_create(&Modes.jsonThread, NULL, jsonThreadEntryPoint, NULL);
 
         if (Modes.json_globe_index) {
@@ -1168,7 +1178,7 @@ int main(int argc, char **argv) {
 
     if (Modes.json_dir) {
 
-        if (ALL_JSON || !Modes.json_globe_index)
+        //if (ALL_JSON || !Modes.json_globe_index)
             pthread_join(Modes.jsonThread, NULL); // Wait on json writer thread exit
 
         if (Modes.json_globe_index) {
