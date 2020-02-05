@@ -1,5 +1,7 @@
 #include "readsb.h"
 
+static void mark_legs(struct aircraft *a);
+
 void init_globe_index(struct tile *s_tiles) {
     int count = 0;
 
@@ -198,120 +200,11 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     if (a->trace_full_write > 122 || now > a->trace_next_fw) {
         // write full trace to /run
 
-        int start = 0;
         if (a->trace_len > 200) {
-            int high = 0;
-            int low = 100000;
-
-            for (int i = 0; i < a->trace_len; i++) {
-                int32_t altitude = a->trace[i].altitude;
-                int on_ground = altitude & (1<<22);
-                int alt_unknown = altitude & (1<<23);
-
-                if (alt_unknown)
-                    continue;
-
-                altitude = altitude & ((1<<21) - 1);
-                altitude -= 100000; // restore actual altitude
-
-                if (on_ground)
-                    altitude = 0;
-
-                if (altitude > high) {
-                    high = altitude;
-                }
-                if (altitude < low) {
-                    low = altitude;
-                }
-            }
-
-            int threshold = (high - low) * 1/2;
-
-            if (threshold > 10000)
-                threshold = 10000;
-
-            high = 0;
-            low = 100000;
-
-            uint64_t major_climb = 0;
-            uint64_t major_descent = 0;
-            uint64_t last_high = 0;
-            uint64_t last_low = 0;
-
-            for (int i = a->trace_len - 1; i >= 1; i--) {
-                struct state state = a->trace[i];
-
-                int32_t altitude = state.altitude;
-                //int stale = altitude & (1<<21);
-                int on_ground = altitude & (1<<22);
-                int alt_unknown = altitude & (1<<23);
-                //int track_unknown = altitude & (1<<24);
-                //int gs_unknown = altitude & (1<<25);
-                //
-                altitude = altitude & ((1<<21) - 1);
-                altitude -= 100000; // restore actual altitude
-
-                if (on_ground)
-                    altitude = 0;
-
-                if (alt_unknown || on_ground ||
-                    state.timestamp > a->trace[i-1].timestamp + 10 * 60 * 1000) {
-                    if (abs(low - altitude) < 1000) {
-                        last_low = state.timestamp;
-                    }
-                }
-
-                if (alt_unknown)
-                    continue;
-
-                if (altitude >= high) {
-                    high = altitude;
-                    last_high = state.timestamp;
-                }
-                if (altitude <= low) {
-                    low = altitude;
-                    last_low = state.timestamp;
-                }
-                if (high - low > threshold) {
-                    if (last_high > last_low) {
-                        major_climb = last_low + 60 * 1000;
-                        //if (a->addr == 0x485875)
-                        //    fprintf(stderr, "descent: %d %lu\n", low, major_climb);
-                        high = low + threshold * 2 / 3;
-                    }
-                    if (last_high < last_low) {
-                        major_descent = last_low;
-                        //if (a->addr == 0x485875)
-                        //    fprintf(stderr, "climb: %d %lu\n", low, major_descent);
-                        low = high - threshold * 2 / 3;
-                    }
-                }
-                if (major_climb && major_descent &&
-                        major_climb > major_descent + 30 * 1000
-                   ) {
-                    for (int i = 0; i < a->trace_len; i++) {
-                        struct state *state = &a->trace[i];
-                        if (state->timestamp >= last_low) {
-                            state->altitude |= (1<<26);
-                            // set leg marker
-                            break;
-                        }
-                    }
-                    major_climb = 0;
-                    major_descent = 0;
-                    //if (a->addr == 0x485875)
-                    //    fprintf(stderr, "leg\n");
-                }
-            }
-            /*
-            if (a->trace_len - start < 142)
-                start = a->trace_len - 142;
-            if (start < 0)
-                start = 0;
-            */
+            mark_legs(a);
         }
 
-        full = generateTraceJson(a, start);
+        full = generateTraceJson(a, 0);
 
         if (a->trace_full_write == 0xc0ffee) {
             a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 30);
@@ -361,7 +254,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
     if (recent.len > 0) {
         snprintf(filename, 256, "traces/%02x/trace_recent_%s%06x.json", a->addr % 256, (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-        writeJsonToGzip(Modes.json_dir, filename, recent, 3);
+        writeJsonToGzip(Modes.json_dir, filename, recent, 1);
         free(recent.buffer);
     }
 
@@ -613,4 +506,159 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 #else
     return NULL;
 #endif
+}
+
+static void mark_legs(struct aircraft *a) {
+    int high = 0;
+    int low = 100000;
+
+    uint32_t focus = 0xfffffff;
+    //focus = 0xa79bba;
+
+    for (int i = 0; i < a->trace_len; i++) {
+        int32_t altitude = a->trace[i].altitude;
+        int on_ground = altitude & (1<<22);
+        int alt_unknown = altitude & (1<<23);
+
+        if (a->trace[i].altitude & (1<<26))
+            a->trace[i].altitude ^= (1<<26);
+
+        if (alt_unknown)
+            continue;
+
+        altitude = altitude & ((1<<21) - 1);
+        altitude -= 100000; // restore actual altitude
+
+        if (on_ground)
+            altitude = 0;
+
+        if (altitude > high) {
+            high = altitude;
+        }
+        if (altitude < low) {
+            low = altitude;
+        }
+    }
+
+    int threshold = (high - low) / 4;
+
+    if (threshold > 10000)
+        threshold = 10000;
+
+    high = 0;
+    low = 100000;
+
+    uint64_t major_climb = 0;
+    uint64_t major_descent = 0;
+    int major_climb_index = 0;
+    int major_descent_index = 0;
+    uint64_t last_high = 0;
+    uint64_t last_low = 0;
+
+    for (int i = 1; i < a->trace_len; i++) {
+        struct state state = a->trace[i];
+
+        int32_t altitude = state.altitude;
+        //int stale = altitude & (1<<21);
+        int on_ground = altitude & (1<<22);
+        int alt_unknown = altitude & (1<<23);
+        //int track_unknown = altitude & (1<<24);
+        //int gs_unknown = altitude & (1<<25);
+        //
+        altitude = altitude & ((1<<21) - 1);
+        altitude -= 100000; // restore actual altitude
+
+        if (on_ground || alt_unknown)
+            altitude = 0;
+
+        if (altitude >= high) {
+            high = altitude;
+        }
+        if (altitude <= low) {
+            low = altitude;
+        }
+
+        if (state.timestamp > a->trace[i-1].timestamp + 10 * 60 * 1000) {
+            high = low = altitude;
+        }
+
+        if (abs(low - altitude) < 800)
+            last_low = state.timestamp;
+        if (abs(high - altitude) < 800)
+            last_high = state.timestamp;
+
+        if (high - low > threshold) {
+            if (last_high > last_low) {
+                major_climb = last_low;
+                major_climb_index = i;
+                if (a->addr == focus) {
+                    time_t nowish = major_climb/1000;
+                    struct tm *utc = gmtime(&nowish);
+                    char tstring[100];
+                    strftime (tstring, 100, "%H:%M:%S", utc);
+                    fprintf(stderr, "climb: %d %s\n", altitude, tstring);
+                }
+                low = high - threshold * 9/10;
+            }
+            if (last_high < last_low) {
+                major_descent = last_low;
+                major_descent_index = i;
+                if (a->addr == focus) {
+                    time_t nowish = major_descent/1000;
+                    struct tm *utc = gmtime(&nowish);
+                    char tstring[100];
+                    strftime (tstring, 100, "%H:%M:%S", utc);
+                    fprintf(stderr, "desc: %d %s\n", altitude, tstring);
+                }
+                high = low + threshold * 9/10;
+            }
+        }
+        if (
+                (major_climb && major_descent && major_climb >= major_descent + 10 * 60 * 1000) ||
+                (major_descent && on_ground && state.timestamp > a->trace[i-1].timestamp + 30 * 60 * 1000))
+        {
+            if (major_descent && on_ground && state.timestamp > a->trace[i-1].timestamp + 30 * 60 * 1000) {
+                a->trace[i].altitude |= (1<<26);
+                // set leg marker
+            } else if (major_descent_index + 1 == major_climb_index) {
+                a->trace[major_climb_index].altitude |= (1<<26);
+                // set leg marker
+            } else {
+                int found = 0;
+                for (int i = major_descent_index + 1; i < major_climb_index; i++) {
+                    if (found)
+                        break;
+
+                    struct state *state = &a->trace[i];
+                    struct state *last = &a->trace[i - 1];
+
+                    if (state->timestamp > last->timestamp + 5 * 60 * 1000) {
+                        state->altitude |= (1<<26);
+                        // set leg marker
+                        found = 1;
+                    }
+                }
+                uint64_t quarter = major_descent + (major_climb - major_descent) / 4;
+                for (int i = major_descent_index + 1; i < major_climb_index; i++) {
+                    if (found)
+                        break;
+
+                    struct state *state = &a->trace[i];
+
+                    if (state->timestamp > quarter) {
+                        state->altitude |= (1<<26);
+                        // set leg marker
+                        found = 1;
+                    }
+                }
+            }
+
+            major_climb = 0;
+            major_climb_index = 0;
+            major_descent = 0;
+            major_descent_index = 0;
+            if (a->addr == focus)
+                fprintf(stderr, "leg\n");
+        }
+    }
 }
