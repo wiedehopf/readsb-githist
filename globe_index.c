@@ -556,6 +556,7 @@ static void mark_legs(struct aircraft *a) {
     int last_low_index = 0;
 
     uint64_t last_airborne = 0;
+    int was_ground = 0;
 
     for (int i = 1; i < a->trace_len; i++) {
         struct state state = a->trace[i];
@@ -625,7 +626,7 @@ static void mark_legs(struct aircraft *a) {
             }
         }
         int leg_ground = 0;
-        if ( (major_descent && on_ground && state.timestamp > a->trace[i-1].timestamp + 20 * 60 * 1000) ||
+        if ( (major_descent && (on_ground || was_ground) && state.timestamp > a->trace[i-1].timestamp + 20 * 60 * 1000) ||
                 (major_descent && on_ground && state.timestamp > last_airborne + 45 * 60 * 1000)
            )
         {
@@ -647,7 +648,7 @@ static void mark_legs(struct aircraft *a) {
                 // set leg marker
             } else {
                 int found = 0;
-                for (int i = major_descent_index + 1; i < major_climb_index; i++) {
+                for (int i = major_climb_index; i >= major_descent_index; i--) {
                     if (found)
                         break;
 
@@ -661,14 +662,14 @@ static void mark_legs(struct aircraft *a) {
                         found = 1;
                     }
                 }
-                uint64_t quarter = major_descent + (major_climb - major_descent) / 4;
+                uint64_t half = major_descent + (major_climb - major_descent) / 2;
                 for (int i = major_descent_index + 1; i < major_climb_index; i++) {
                     if (found)
                         break;
 
                     struct state *state = &a->trace[i];
 
-                    if (state->timestamp > quarter) {
+                    if (state->timestamp > half) {
                         state->altitude |= (1<<26);
                         // set leg marker
                         leg_ts = state->timestamp;
@@ -689,5 +690,7 @@ static void mark_legs(struct aircraft *a) {
                 fprintf(stderr, "leg: %s\n", tstring);
             }
         }
+
+        was_ground = on_ground;
     }
 }
