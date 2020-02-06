@@ -556,6 +556,8 @@ static void mark_legs(struct aircraft *a) {
     uint64_t last_high = 0;
     uint64_t last_low = 0;
 
+    uint64_t last_airborne = 0;
+
     for (int i = 1; i < a->trace_len; i++) {
         struct state state = a->trace[i];
 
@@ -571,6 +573,9 @@ static void mark_legs(struct aircraft *a) {
 
         if (on_ground || alt_unknown)
             altitude = 0;
+
+        if(!on_ground)
+            last_airborne = state.timestamp;
 
         if (altitude >= high) {
             high = altitude;
@@ -614,12 +619,20 @@ static void mark_legs(struct aircraft *a) {
                 high = low + threshold * 9/10;
             }
         }
-        if (
-                (major_climb && major_descent && major_climb >= major_descent + 10 * 60 * 1000) ||
-                (major_descent && on_ground && state.timestamp > a->trace[i-1].timestamp + 30 * 60 * 1000))
+        int leg_ground = 0;
+        if ( (major_descent && on_ground && state.timestamp > a->trace[i-1].timestamp + 20 * 60 * 1000) ||
+                (major_descent && on_ground && state.timestamp > last_airborne + 45 * 60 * 1000)
+           )
+        {
+            leg_ground = 1;
+        }
+
+        if ( (major_climb && major_descent && major_climb >= major_descent + 10 * 60 * 1000) ||
+                leg_ground
+           )
         {
             uint64_t leg_ts = 0;
-            if (major_descent && on_ground && state.timestamp > a->trace[i-1].timestamp + 30 * 60 * 1000) {
+            if (leg_ground) {
                 a->trace[i].altitude |= (1<<26);
                 leg_ts = a->trace[i].timestamp;
                 // set leg marker
