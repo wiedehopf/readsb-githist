@@ -507,14 +507,16 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 }
 
 static void mark_legs(struct aircraft *a) {
-    if (a->trace_len < 2)
+    if (a->trace_len < 20)
         return;
 
     int high = 0;
     int low = 100000;
 
     uint32_t focus = 0xfffffff;
-    //focus = 0xa79bba;
+    //focus = 0x3c5465;
+
+    double sum = 0;
 
     for (int i = 0; i < a->trace_len; i++) {
         int32_t altitude = a->trace[i].altitude;
@@ -533,15 +535,10 @@ static void mark_legs(struct aircraft *a) {
         if (on_ground)
             altitude = 0;
 
-        if (altitude > high) {
-            high = altitude;
-        }
-        if (altitude < low) {
-            low = altitude;
-        }
+        sum += altitude;
     }
 
-    int threshold = (high - low) / 4;
+    int threshold = (int) sum / a->trace_len / 3;
 
     if (threshold > 10000)
         threshold = 10000;
@@ -555,6 +552,8 @@ static void mark_legs(struct aircraft *a) {
     int major_descent_index = 0;
     uint64_t last_high = 0;
     uint64_t last_low = 0;
+
+    int last_low_index = 0;
 
     uint64_t last_airborne = 0;
 
@@ -584,19 +583,24 @@ static void mark_legs(struct aircraft *a) {
             low = altitude;
         }
 
-        if (state.timestamp > a->trace[i-1].timestamp + 10 * 60 * 1000) {
+        /*
+        if (state.timestamp > a->trace[i-1].timestamp + 45 * 60 * 1000) {
             high = low = altitude;
         }
+        */
 
-        if (abs(low - altitude) < 800)
+        if (abs(low - altitude) < 800) {
             last_low = state.timestamp;
+            last_low_index = i;
+        }
         if (abs(high - altitude) < 800)
             last_high = state.timestamp;
 
         if (high - low > threshold) {
             if (last_high > last_low) {
-                major_climb = last_low;
-                major_climb_index = i;
+                int bla = max(0, last_low_index + 3);
+                major_climb = a->trace[bla].timestamp;
+                major_climb_index = bla;
                 if (a->addr == focus) {
                     time_t nowish = major_climb/1000;
                     struct tm *utc = gmtime(&nowish);
@@ -607,8 +611,9 @@ static void mark_legs(struct aircraft *a) {
                 low = high - threshold * 9/10;
             }
             if (last_high < last_low) {
-                major_descent = last_low;
-                major_descent_index = i;
+                int bla = max(0, i - 3);
+                major_descent = a->trace[bla].timestamp;
+                major_descent_index = bla;
                 if (a->addr == focus) {
                     time_t nowish = major_descent/1000;
                     struct tm *utc = gmtime(&nowish);
