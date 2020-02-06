@@ -194,15 +194,13 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
     a->trace_write = 0;
 
+    mark_legs(a);
+
     recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
     // write recent trace to /run
 
     if (a->trace_full_write > 122 || now > a->trace_next_fw) {
         // write full trace to /run
-
-        if (a->trace_len > 200) {
-            mark_legs(a);
-        }
 
         full = generateTraceJson(a, 0);
 
@@ -509,6 +507,9 @@ void *jsonTraceThreadEntryPoint(void *arg) {
 }
 
 static void mark_legs(struct aircraft *a) {
+    if (a->trace_len < 2)
+        return;
+
     int high = 0;
     int low = 100000;
 
