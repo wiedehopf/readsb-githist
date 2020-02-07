@@ -2717,12 +2717,15 @@ void modesNetPeriodicWork(void) {
 
     // supply JSON to vrs_out writer
     if (Modes.vrs_out.service && Modes.vrs_out.service->connections && now >= next_tcp_json) {
-        static int part;
-        int n_parts = 1<<3; // must be power of 2
-        writeJsonToNet(&Modes.vrs_out, generateVRS(part, n_parts));
-        if (++part >= n_parts)
+        static uint32_t part;
+        static uint32_t count;
+        uint32_t n_parts = 1<<3; // must be power of 2
+        writeJsonToNet(&Modes.vrs_out, generateVRS(part, n_parts, (count % n_parts != part)));
+        if (++part >= n_parts) {
             part = 0;
-        next_tcp_json = now + 1000 / n_parts;
+            count++;
+        }
+        next_tcp_json = now + 3000 / n_parts;
     }
 
     // If we have generated no messages for a while, send
@@ -2813,11 +2816,11 @@ void writeJsonToNet(struct net_writer *writer, struct char_buffer cb) {
     free(content);
 }
 
-struct char_buffer generateVRS(int part, int n_parts) {
+struct char_buffer generateVRS(int part, int n_parts, int reduced_data) {
     struct char_buffer cb;
     uint64_t now = mstime();
     struct aircraft *a;
-    int buflen = 512*1024; // The initial buffer is resized as needed
+    int buflen = 256*1024; // The initial buffer is resized as needed
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
     char *line_start;
     int first = 1;
@@ -2832,7 +2835,7 @@ struct char_buffer generateVRS(int part, int n_parts) {
             if (a->messages < 2) { // basic filter for bad decodes
                 continue;
             }
-            if (now > a->seen && (now - a->seen) > 5E3) // don't include stale aircraft in the JSON
+            if ((now - a->seen) > 5E3) // don't include stale aircraft in the JSON
                 continue;
 
             // For now, suppress non-ICAO addresses
@@ -2846,22 +2849,47 @@ struct char_buffer generateVRS(int part, int n_parts) {
 
 retry:
             line_start = p;
-            p = safe_snprintf(p, end, "{\"Sig\":%.0f",
-                    255*((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
-                            a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));
 
-            p = safe_snprintf(p, end, ",\"Icao\":\"%s%06X\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+            p = safe_snprintf(p, end, "{\"Icao\":\"%s%06X\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+
+
+            if (trackDataValid(&a->position_valid)) {
+                p = safe_snprintf(p, end, ",\"Lat\":%f,\"Long\":%f", a->lat, a->lon);
+                //p = safe_snprintf(p, end, ",\"PosTime\":%"PRIu64, a->position_valid.updated);
+            }
 
             if (trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= 3)
                 p = safe_snprintf(p, end, ",\"Alt\":%d", a->altitude_baro);
+
+            if (trackDataValid(&a->geom_rate_valid)) {
+                p = safe_snprintf(p, end, ",\"Vsi\":%d", a->geom_rate);
+            } else if (trackDataValid(&a->baro_rate_valid)) {
+                p = safe_snprintf(p, end, ",\"Vsi\":%d", a->baro_rate);
+            }
+
+            if (trackDataValid(&a->track_valid)) {
+                p = safe_snprintf(p, end, ",\"Trak\":%.1f", a->track);
+            } else if (trackDataValid(&a->mag_heading_valid)) {
+                p = safe_snprintf(p, end, ",\"Trak\":%.1f", a->mag_heading);
+            } else if (trackDataValid(&a->true_heading_valid)) {
+                p = safe_snprintf(p, end, ",\"Trak\":%.1f", a->true_heading);
+            }
+
+            if (trackDataValid(&a->gs_valid)) {
+                p = safe_snprintf(p, end, ",\"Spd\":%.1f", a->gs);
+            } else if (trackDataValid(&a->ias_valid)) {
+                p = safe_snprintf(p, end, ",\"Spd\":%u", a->ias);
+            } else if (trackDataValid(&a->tas_valid)) {
+                p = safe_snprintf(p, end, ",\"Spd\":%u", a->tas);
+            }
+
             if (trackDataValid(&a->altitude_geom_valid))
                 p = safe_snprintf(p, end, ",\"GAlt\":%d", a->altitude_geom);
 
-
-            if (trackDataValid(&a->nav_qnh_valid))
-                p = safe_snprintf(p, end, ",\"InHg\":%.2f", a->nav_qnh * 0.02952998307);
-
-            //p = safe_snprintf(p, end, ",\"AltT\":%d", 0);
+            if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND)
+                p = safe_snprintf(p, end, ",\"Gnd\":true");
+            else
+                p = safe_snprintf(p, end, ",\"Gnd\":false");
 
             if (trackDataValid(&a->nav_altitude_mcp_valid)) {
                 p = safe_snprintf(p, end, ",\"TAlt\":%d", a->nav_altitude_mcp);
@@ -2869,16 +2897,45 @@ retry:
                 p = safe_snprintf(p, end, ",\"TAlt\":%d", a->nav_altitude_fms);
             }
 
+            if (trackDataValid(&a->squawk_valid))
+                p = safe_snprintf(p, end, ",\"Sqk\":\"%04x\"", a->squawk);
+
+            if (reduced_data)
+                goto skip_fields;
+
             if (trackDataValid(&a->callsign_valid)) {
                 char buf[128];
                 p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
-                //p = safe_snprintf(p, end, ",\"CallSus\":false");
+                p = safe_snprintf(p, end, ",\"CallSus\":false");
             }
 
-            if (trackDataValid(&a->position_valid)) {
-                p = safe_snprintf(p, end, ",\"Lat\":%f,\"Long\":%f", a->lat, a->lon);
-                p = safe_snprintf(p, end, ",\"PosTime\":%"PRIu64, a->position_valid.updated);
+            if (trackDataValid(&a->nav_heading_valid))
+                p = safe_snprintf(p, end, ",\"TTrk\":%.1f", a->nav_heading);
+
+
+            if (trackDataValid(&a->geom_rate_valid)) {
+                p = safe_snprintf(p, end, ",\"VsiT\":1");
+            } else if (trackDataValid(&a->baro_rate_valid)) {
+                p = safe_snprintf(p, end, ",\"VsiT\":0");
             }
+
+
+            if (trackDataValid(&a->track_valid)) {
+                p = safe_snprintf(p, end, ",\"TrkH\":false");
+            } else if (trackDataValid(&a->mag_heading_valid)) {
+                p = safe_snprintf(p, end, ",\"TrkH\":true");
+            } else if (trackDataValid(&a->true_heading_valid)) {
+                p = safe_snprintf(p, end, ",\"TrkH\":true");
+            }
+
+            p = safe_snprintf(p, end, ",\"Sig\":%.0f",
+                    255*((a->signalLevel[0] + a->signalLevel[1] + a->signalLevel[2] + a->signalLevel[3] +
+                            a->signalLevel[4] + a->signalLevel[5] + a->signalLevel[6] + a->signalLevel[7] + 1e-5) / 8));
+
+            if (trackDataValid(&a->nav_qnh_valid))
+                p = safe_snprintf(p, end, ",\"InHg\":%.2f", a->nav_qnh * 0.02952998307);
+
+            p = safe_snprintf(p, end, ",\"AltT\":%d", 0);
 
             if (a->position_valid.source == SOURCE_MLAT)
                 p = safe_snprintf(p, end, ",\"Mlat\":true");
@@ -2889,48 +2946,13 @@ retry:
             else
                 p = safe_snprintf(p, end, ",\"Tisb\":false");
 
-
             if (trackDataValid(&a->gs_valid)) {
-                p = safe_snprintf(p, end, ",\"Spd\":%.1f", a->gs);
                 p = safe_snprintf(p, end, ",\"SpdTyp\":0");
             } else if (trackDataValid(&a->ias_valid)) {
-                p = safe_snprintf(p, end, ",\"Spd\":%u", a->ias);
                 p = safe_snprintf(p, end, ",\"SpdTyp\":2");
             } else if (trackDataValid(&a->tas_valid)) {
-                p = safe_snprintf(p, end, ",\"Spd\":%u", a->tas);
                 p = safe_snprintf(p, end, ",\"SpdTyp\":3");
             }
-
-            if (trackDataValid(&a->track_valid)) {
-                p = safe_snprintf(p, end, ",\"Trak\":%.1f", a->track);
-                p = safe_snprintf(p, end, ",\"TrkH\":false");
-            } else if (trackDataValid(&a->mag_heading_valid)) {
-                p = safe_snprintf(p, end, ",\"Trak\":%.1f", a->mag_heading);
-                p = safe_snprintf(p, end, ",\"TrkH\":true");
-            } else if (trackDataValid(&a->true_heading_valid)) {
-                p = safe_snprintf(p, end, ",\"Trak\":%.1f", a->true_heading);
-                p = safe_snprintf(p, end, ",\"TrkH\":true");
-            }
-
-            if (trackDataValid(&a->nav_heading_valid))
-                p = safe_snprintf(p, end, ",\"TTrk\":%.1f", a->nav_heading);
-
-            if (trackDataValid(&a->squawk_valid))
-                p = safe_snprintf(p, end, ",\"Sqk\":\"%04x\"", a->squawk);
-
-            if (trackDataValid(&a->geom_rate_valid)) {
-                p = safe_snprintf(p, end, ",\"Vsi\":%d", a->geom_rate);
-                p = safe_snprintf(p, end, ",\"VsiT\":1");
-            } else if (trackDataValid(&a->baro_rate_valid)) {
-                p = safe_snprintf(p, end, ",\"Vsi\":%d", a->baro_rate);
-                p = safe_snprintf(p, end, ",\"VsiT\":0");
-            }
-
-
-            if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND)
-                p = safe_snprintf(p, end, ",\"Gnd\":true");
-            else
-                p = safe_snprintf(p, end, ",\"Gnd\":false");
 
             if (a->adsb_version >= 0)
                 p = safe_snprintf(p, end, ",\"Trt\":%d", a->adsb_version + 3);
@@ -2938,7 +2960,10 @@ retry:
                 p = safe_snprintf(p, end, ",\"Trt\":%d", 1);
 
 
-            p = safe_snprintf(p, end, ",\"Cmsgs\":%u", a->messages);
+            //p = safe_snprintf(p, end, ",\"Cmsgs\":%ld", a->messages);
+
+
+skip_fields:
 
             p = safe_snprintf(p, end, "}");
 

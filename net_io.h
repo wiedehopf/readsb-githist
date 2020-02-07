@@ -158,7 +158,7 @@ struct char_buffer generateReceiverJson ();
 struct char_buffer generateHistoryJson ();
 void writeJsonToFile (const char* dir, const char *file, struct char_buffer cb);
 void writeJsonToGzip (const char* dir, const char *file, struct char_buffer cb, int gzip);
-struct char_buffer generateVRS(int part, int n_parts);
+struct char_buffer generateVRS(int part, int n_parts, int reduced_data);
 void writeJsonToNet(struct net_writer *writer, struct char_buffer cb);
 
 // keep unused functions for now
