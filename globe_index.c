@@ -626,8 +626,8 @@ static void mark_legs(struct aircraft *a) {
             }
         }
         int leg_ground = 0;
-        if ( (major_descent && (on_ground || was_ground) && state.timestamp > a->trace[i-1].timestamp + 20 * 60 * 1000) ||
-                (major_descent && on_ground && state.timestamp > last_airborne + 45 * 60 * 1000)
+        if ( (major_descent && (on_ground || was_ground) && state.timestamp > a->trace[i-1].timestamp + 25 * 60 * 1000) ||
+                (major_descent && (on_ground || was_ground) && state.timestamp > last_airborne + 45 * 60 * 1000)
            )
         {
             leg_ground = 1;
