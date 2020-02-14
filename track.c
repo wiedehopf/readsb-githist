@@ -1587,7 +1587,8 @@ void trackPeriodicUpdate() {
         pthread_mutex_lock(&Modes.decodeThreadMutex);
 
         trackRemoveStaleAircraft(&freeList);
-        trackMatchAC(now);
+        if (Modes.mode_ac)
+            trackMatchAC(now);
 
         pthread_mutex_unlock(&Modes.decodeThreadMutex);
         pthread_mutex_unlock(&Modes.jsonThreadMutex);

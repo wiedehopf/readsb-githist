@@ -194,7 +194,7 @@ static void modesInitConfig(void) {
     Modes.json_interval = 1000;
     Modes.json_location_accuracy = 1;
     Modes.maxRange = 1852 * 300; // 300NM default max range
-    Modes.mode_ac_auto = 1;
+    Modes.mode_ac_auto = 0;
     Modes.nfix_crc = 1;
     Modes.biastee = 0;
     Modes.filter_persistence = 4;
