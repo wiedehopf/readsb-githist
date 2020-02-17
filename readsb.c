@@ -339,7 +339,7 @@ static void *jsonThreadEntryPoint(void *arg) {
         writeJsonToGzip(Modes.json_dir, "aircraft.json.gz", cb, 3);
         writeJsonToFile(Modes.json_dir, "aircraft.json", cb);
 
-        if ((ALL_JSON || !Modes.json_globe_index) && now >= next_history) {
+        if ((ALL_JSON) && now >= next_history) {
             char filebuf[PATH_MAX];
 
             snprintf(filebuf, PATH_MAX, "history_%d.json", Modes.json_aircraft_history_next);
@@ -1146,21 +1146,24 @@ int main(int argc, char **argv) {
                 snprintf(pathbuf, PATH_MAX, "%s/traces/%02x", Modes.json_dir, i);
                 mkdir(pathbuf, 0755);
             }
-            if (Modes.globe_history_dir) {
-                char pathbuf[PATH_MAX];
-                mkdir(Modes.globe_history_dir, 0755);
 
-                snprintf(pathbuf, PATH_MAX, "%s/internal_state", Modes.globe_history_dir);
-                mkdir(pathbuf, 0755);
-
-                for (int i = 0; i < 256; i++) {
-                    snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
-                    mkdir(pathbuf, 0755);
-                }
-            }
-
+        }
+        if (Modes.json_globe_index || Modes.globe_history_dir) {
             for (int i = 0; i < TRACE_THREADS; i++) {
                 pthread_create(&Modes.jsonTraceThread[i], NULL, jsonTraceThreadEntryPoint, &threadNumber[i]);
+            }
+        }
+
+        if (Modes.globe_history_dir) {
+            char pathbuf[PATH_MAX];
+            mkdir(Modes.globe_history_dir, 0755);
+
+            snprintf(pathbuf, PATH_MAX, "%s/internal_state", Modes.globe_history_dir);
+            mkdir(pathbuf, 0755);
+
+            for (int i = 0; i < 256; i++) {
+                snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x", Modes.globe_history_dir, i);
+                mkdir(pathbuf, 0755);
             }
         }
     }
@@ -1183,6 +1186,8 @@ int main(int argc, char **argv) {
 
         if (Modes.json_globe_index) {
             pthread_join(Modes.jsonGlobeThread, NULL); // Wait on json writer thread exit
+        }
+        if (Modes.json_globe_index || Modes.globe_history_dir) {
             for (int i = 0; i < TRACE_THREADS; i++) {
                 pthread_join(Modes.jsonTraceThread[i], NULL); // Wait on json writer thread exit
             }

@@ -2072,6 +2072,13 @@ retry:
 struct char_buffer generateTraceJson(struct aircraft *a, int start) {
     struct char_buffer cb;
     int buflen = a->trace_len * 80 + 1024;
+
+    if (!Modes.json_globe_index) {
+        cb.len = 0;
+        cb.buffer = NULL;
+        return cb;
+    }
+
     char *buf = (char *) malloc(buflen), *p = buf, *end = buf + buflen;
 
     p = safe_snprintf(p, end, "{\"icao\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);

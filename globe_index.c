@@ -206,6 +206,8 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
         if (a->trace_full_write == 0xc0ffee) {
             a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 30);
+        } else if (!Modes.json_globe_index) {
+            a->trace_next_fw = now + 3 * (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 16) * 1000;
         } else {
             a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 16) * 1000;
         }
@@ -216,6 +218,12 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
         a->trace_full_write = 0;
         //fprintf(stderr, "%06x\n", a->addr);
+        if (a->pos_set) {
+            shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
+            shadow = malloc(shadow_size);
+            memcpy(shadow, a, sizeof(struct aircraft));
+            memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
+        }
     }
 
     a->trace_full_write++;
@@ -223,10 +231,6 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     if (a->trace_len > 0 && write_history == 2 &&
             Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
         // write to permanent storage
-        shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
-        shadow = malloc(shadow_size);
-        memcpy(shadow, a, sizeof(struct aircraft));
-        memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
 
         struct tm *utc = gmtime(&nowish);
         utc->tm_sec = 0;
