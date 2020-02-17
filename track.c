@@ -1660,6 +1660,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
     if (Modes.json_globe_index) {
 
         a->globe_index = globe_index(new_lat, new_lon);
+
         if (!a->trace) {
             pthread_mutex_lock(&a->trace_mutex);
 
@@ -1671,8 +1672,6 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
             pthread_mutex_unlock(&a->trace_mutex);
         }
-
-        resize_trace(a, now);
 
         struct state *trace = a->trace;
 
@@ -1785,6 +1784,9 @@ save_state:
         (a->trace_len)++;
         a->trace_write = 1;
         pthread_mutex_unlock(&a->trace_mutex);
+
+        resize_trace(a, now);
+
         //fprintf(stderr, "Added to trace for %06X (%d).\n", a->addr, a->trace_len);
 
 no_save_state:
@@ -1852,10 +1854,20 @@ static void position_bad(struct aircraft *a) {
 }
 
 static void resize_trace(struct aircraft *a, uint64_t now) {
-    if (a->trace_len == 0)
-        return;
-
     struct state *trace = a->trace;
+
+    if (a->trace_alloc == 0) {
+        return;
+    }
+
+    if (a->trace_len == 0) {
+        pthread_mutex_lock(&a->trace_mutex);
+        free(a->trace);
+        a->trace_alloc = 0;
+        a->trace = NULL;
+        pthread_mutex_unlock(&a->trace_mutex);
+        return;
+    }
 
     if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + GLOBE_OVERLAP * 2) * 1000) {
         int new_start = a->trace_len;
@@ -1894,6 +1906,7 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
         pthread_mutex_unlock(&a->trace_mutex);
     }
+
     if (a->trace_len + 15 * GLOBE_STEP / 8 <= a->trace_alloc) {
         pthread_mutex_lock(&a->trace_mutex);
         a->trace_alloc -= GLOBE_STEP;
