@@ -208,11 +208,11 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         full = generateTraceJson(a, 0);
 
         if (a->trace_full_write == 0xc0ffee) {
-            a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 30);
-        } else if (!Modes.json_globe_index || a->trace_len < 5) {
-            a->trace_next_fw = now + 6 * (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 16) * 1000;
+            a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 60);
+        } else if (!Modes.json_globe_index)  {
+            a->trace_next_fw = now + 6 * (GLOBE_OVERLAP - 60 - rand() % GLOBE_OVERLAP / 16) * 1000;
         } else {
-            a->trace_next_fw = now + (GLOBE_OVERLAP - 30 - rand() % GLOBE_OVERLAP / 16) * 1000;
+            a->trace_next_fw = now + (GLOBE_OVERLAP - 60 - rand() % GLOBE_OVERLAP / 16) * 1000;
         }
 
         if (write_history && a->trace_full_write > 2) {
@@ -433,7 +433,7 @@ void *load_state(void *arg) {
                     unlink(pathbuf);
                     continue;
                 }
-                a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP / 20);
+                a->trace_next_fw = now + 1000 * (rand() % 120); // spread over 2 mins
                 a->trace_full_write = 0xc0ffee; // rewrite full history file
                 //a->trace_write = 1;
                 //write_trace(a, now, 0);

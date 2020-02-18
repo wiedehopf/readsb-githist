@@ -282,7 +282,7 @@ typedef enum {
 #define AIRCRAFTS_BUCKETS (1<<15)
 
 #define GLOBE_TRACE_SIZE 32768
-#define GLOBE_OVERLAP 1200
+#define GLOBE_OVERLAP 3600
 #define GLOBE_STEP 128
 #define TRACE_THREADS 4
 
