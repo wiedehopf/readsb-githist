@@ -1881,7 +1881,7 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
             int found = 0;
             for (int i = 0; i < a->trace_len; i++) {
                 struct state *state = &a->trace[i];
-                if (now < state->timestamp + (24 * 3600 + GLOBE_OVERLAP) * 1000) {
+                if (now < state->timestamp + (24 * 3600 + GLOBE_OVERLAP * 2 - 20 * 60) * 1000) {
                     new_start = i;
                     found = 1;
                     break;
@@ -1899,8 +1899,8 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
         a->trace_len -= new_start;
         memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
 
-        a->trace_write = 1;
-        a->trace_full_write = 9999; // rewrite full history file
+        //a->trace_write = 1;
+        //a->trace_full_write = 9999; // rewrite full history file
 
         pthread_mutex_unlock(&a->trace_mutex);
     }

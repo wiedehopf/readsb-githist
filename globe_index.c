@@ -199,13 +199,26 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
 
     mark_legs(a);
 
-    recent = generateTraceJson(a, (a->trace_len > 142) ? (a->trace_len - 142) : 0);
+    int start24 = 0;
+    for (int i = 0; i < a->trace_len; i++) {
+        struct state state = a->trace[i];
+        if (state.timestamp > now - 24 * 3600 * 1000) {
+            start24 = i;
+            break;
+        }
+    }
+
+    int start_recent = start24;
+    if (a->trace_len > 142 && a->trace_len - 142 > start24)
+       start_recent = (a->trace_len - 142);
+
+    recent = generateTraceJson(a, start_recent);
     // write recent trace to /run
 
     if (a->trace_full_write > 122 || now > a->trace_next_fw) {
         // write full trace to /run
 
-        full = generateTraceJson(a, 0);
+        full = generateTraceJson(a, start24);
 
         if (a->trace_full_write == 0xc0ffee) {
             a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 60);
