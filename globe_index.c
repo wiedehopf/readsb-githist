@@ -190,7 +190,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     full.len = 0;
     hist.len = 0;
 
-    if (a->trace_len == 0 && a->trace_full_write == 0xdead)
+    if (Modes.json_globe_index && a->trace_len == 0 && a->trace_full_write == 0xdead)
         return;
 
     pthread_mutex_lock(&a->trace_mutex);
