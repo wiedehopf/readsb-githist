@@ -649,50 +649,44 @@ static void mark_legs(struct aircraft *a) {
            )
         {
             uint64_t leg_ts = 0;
-            if (leg_ground) {
-                a->trace[i].altitude |= (1<<26);
-                leg_ts = a->trace[i].timestamp;
-                // set leg marker
-            } else if (major_descent_index + 1 == major_climb_index) {
-                a->trace[major_climb_index].altitude |= (1<<26);
-                leg_ts = a->trace[major_climb_index].timestamp;
-                // set leg marker
-            } else {
-                int found = 0;
-                for (int i = major_climb_index; i >= major_descent_index; i--) {
-                    if (found)
-                        break;
+            struct state *found = NULL;
 
+            if (leg_ground) {
+                found = &a->trace[i];
+            } else if (major_descent_index + 1 == major_climb_index) {
+                found = &a->trace[major_climb_index];
+            } else {
+                for (int i = major_climb_index; i >= major_descent_index; i--) {
                     struct state *state = &a->trace[i];
                     struct state *last = &a->trace[i - 1];
 
                     if (state->timestamp > last->timestamp + 5 * 60 * 1000) {
-                        state->altitude |= (1<<26);
-                        // set leg marker
-                        leg_ts = state->timestamp;
-                        found = 1;
+                        found = state;
+                        break;
                     }
                 }
                 uint64_t half = major_descent + (major_climb - major_descent) / 2;
                 for (int i = major_descent_index + 1; i < major_climb_index; i++) {
-                    if (found)
-                        break;
-
                     struct state *state = &a->trace[i];
 
                     if (state->timestamp > half) {
-                        state->altitude |= (1<<26);
-                        // set leg marker
-                        leg_ts = state->timestamp;
-                        found = 1;
+                        found = state;
+                        break;
                     }
                 }
+            }
+
+            if (found) {
+                leg_ts = found->timestamp;
+                found->altitude |= (1<<26);
+                // set leg marker
             }
 
             major_climb = 0;
             major_climb_index = 0;
             major_descent = 0;
             major_descent_index = 0;
+
             if (a->addr == focus) {
                 time_t nowish = leg_ts/1000;
                 struct tm *utc = gmtime(&nowish);
