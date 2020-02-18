@@ -221,7 +221,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
         full = generateTraceJson(a, start24);
 
         if (a->trace_full_write == 0xc0ffee) {
-            a->trace_next_fw = now + 1000 * (rand() % GLOBE_OVERLAP - 60);
+            a->trace_next_fw = now + 1000 * (rand() % (GLOBE_OVERLAP - 60 - GLOBE_OVERLAP / 16));
         } else if (!Modes.json_globe_index)  {
             a->trace_next_fw = now + 6 * (GLOBE_OVERLAP - 60 - rand() % GLOBE_OVERLAP / 16) * 1000;
         } else {
@@ -542,13 +542,18 @@ static void mark_legs(struct aircraft *a) {
 
     double sum = 0;
 
+    struct state *last_leg = NULL;
+    struct state *new_leg = NULL;
+
     for (int i = 0; i < a->trace_len; i++) {
         int32_t altitude = a->trace[i].altitude;
         int on_ground = altitude & (1<<22);
         int alt_unknown = altitude & (1<<23);
 
-        if (a->trace[i].altitude & (1<<26))
+        if (a->trace[i].altitude & (1<<26)) {
             a->trace[i].altitude ^= (1<<26);
+            last_leg = &a->trace[i];
+        }
 
         if (alt_unknown)
             continue;
@@ -662,19 +667,18 @@ static void mark_legs(struct aircraft *a) {
            )
         {
             uint64_t leg_ts = 0;
-            struct state *found = NULL;
 
             if (leg_ground) {
-                found = &a->trace[i];
+                new_leg = &a->trace[i];
             } else if (major_descent_index + 1 == major_climb_index) {
-                found = &a->trace[major_climb_index];
+                new_leg = &a->trace[major_climb_index];
             } else {
                 for (int i = major_climb_index; i >= major_descent_index; i--) {
                     struct state *state = &a->trace[i];
                     struct state *last = &a->trace[i - 1];
 
                     if (state->timestamp > last->timestamp + 5 * 60 * 1000) {
-                        found = state;
+                        new_leg = state;
                         break;
                     }
                 }
@@ -683,15 +687,15 @@ static void mark_legs(struct aircraft *a) {
                     struct state *state = &a->trace[i];
 
                     if (state->timestamp > half) {
-                        found = state;
+                        new_leg = state;
                         break;
                     }
                 }
             }
 
-            if (found) {
-                leg_ts = found->timestamp;
-                found->altitude |= (1<<26);
+            if (new_leg) {
+                leg_ts = new_leg->timestamp;
+                new_leg->altitude |= (1<<26);
                 // set leg marker
             }
 
@@ -710,5 +714,9 @@ static void mark_legs(struct aircraft *a) {
         }
 
         was_ground = on_ground;
+    }
+    if (last_leg != new_leg) {
+        a->trace_full_write = 9999;
+        //fprintf(stderr, "%06x\n", a->addr);
     }
 }
