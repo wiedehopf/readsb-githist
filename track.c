@@ -1680,12 +1680,17 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         int was_ground = 0;
         float turn_density = 5;
         float track = a->track;
+        int track_valid = trackDataValid(&a->track_valid);
         struct state *last = NULL;
 
         if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND) {
             on_ground = 1;
-            if (trackDataValid(&a->true_heading_valid))
+            if (trackDataValid(&a->true_heading_valid)) {
                 track = a->true_heading;
+                track_valid = 1;
+            } else {
+                track_valid = 0;
+            }
         }
         if (a->trace_len == 0 )
             goto save_state;
@@ -1783,7 +1788,7 @@ save_state:
             new->altitude |= (1<<24);
 
         //int track_unknown = altitude & (1<<25);
-        if (!trackDataValid(&a->track_valid))
+        if (!track_valid)
             new->altitude |= (1<<25);
 
         pthread_mutex_lock(&a->trace_mutex);
