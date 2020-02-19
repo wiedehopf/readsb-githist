@@ -2095,8 +2095,8 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start) {
             int stale = (altitude & (1<<21)) ? 1 : 0;
             int on_ground = altitude & (1<<22);
             int alt_unknown = altitude & (1<<23);
-            int track_unknown = altitude & (1<<24);
-            int gs_unknown = altitude & (1<<25);
+            int gs_unknown = altitude & (1<<24);
+            int track_unknown = altitude & (1<<25);
             int leg_marker = (altitude & (1<<26)) ? 1 : 0;
 
             altitude = altitude & ((1<<21) - 1);

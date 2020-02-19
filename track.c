@@ -1759,30 +1759,30 @@ save_state:
         new->gs = (int16_t) (10 * a->gs);
         new->track = (int16_t) (10 * track);
         new->altitude = a->altitude_baro + 100000;
-        /*
-           int stale = altitude & (1<<21);
-           int on_ground = altitude & (1<<22);
-           int alt_unknown = altitude & (1<<23);
-           int track_unknown = altitude & (1<<24);
-           int gs_unknown = altitude & (1<<25);
-        */
+
         if (new->altitude < 0 || new->altitude > 1000000) {
             new->altitude = 0;
             new->altitude |= (1<<23);
         }
+        //int alt_unknown = altitude & (1<<23);
 
+        //int stale = altitude & (1<<21);
         if (now > a->seen_pos + 15 * 1000 || (last && now > last->timestamp + 500 * 1000))
             new->altitude |= (1<<21);
 
+        //int on_ground = altitude & (1<<22);
         if (on_ground)
             new->altitude |= (1<<22);
 
+        //int alt_unknown = altitude & (1<<23);
         if (!trackDataValid(&a->altitude_baro_valid) || a->altitude_baro_reliable < 2)
             new->altitude |= (1<<23);
 
+        // int gs_unknown = altitude & (1<<24);
         if (!trackDataValid(&a->gs_valid))
             new->altitude |= (1<<24);
 
+        //int track_unknown = altitude & (1<<25);
         if (!trackDataValid(&a->track_valid))
             new->altitude |= (1<<25);
 
