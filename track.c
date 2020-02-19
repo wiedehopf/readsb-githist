@@ -1697,7 +1697,8 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         int32_t last_alt = last->altitude & ((1<<21) - 1);
         last_alt -= 100000; // restore actual altitude
 
-        was_ground = last->altitude & (1<<22);
+        if (last->altitude & (1<<22))
+            was_ground = 1;
 
         if (on_ground != was_ground)
             goto save_state;
