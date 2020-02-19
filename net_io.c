@@ -2091,16 +2091,15 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start) {
         for (int i = start; i < a->trace_len; i++) {
             struct state *trace = &a->trace[i];
 
-            int32_t altitude = trace->altitude;
-            int stale = (altitude & (1<<21)) ? 1 : 0;
-            int on_ground = altitude & (1<<22);
-            int alt_unknown = altitude & (1<<23);
-            int gs_unknown = altitude & (1<<24);
-            int track_unknown = altitude & (1<<25);
-            int leg_marker = (altitude & (1<<26)) ? 1 : 0;
-
-            altitude = altitude & ((1<<21) - 1);
-            altitude -= 100000; // restore actual altitude
+            int32_t altitude = trace->altitude * 25;
+            int32_t geom_rate = trace->geom_rate * 32;
+            int geom_rate_valid = trace->flags.geom_rate_valid;
+            int stale = trace->flags.stale;
+            int on_ground = trace->flags.on_ground;
+            int altitude_valid = trace->flags.altitude_valid;
+            int gs_valid = trace->flags.gs_valid;
+            int track_valid = trace->flags.track_valid;
+            int leg_marker = trace->flags.leg_marker;
 
                 // in the air
                 p = safe_snprintf(p, end, "[%.1f,%f,%f",
@@ -2108,24 +2107,30 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start) {
 
                 if (on_ground)
                     p = safe_snprintf(p, end, ",\"ground\"");
-                else if (alt_unknown)
-                    p = safe_snprintf(p, end, ",null");
-                else
+                else if (altitude_valid)
                     p = safe_snprintf(p, end, ",%d", altitude);
-
-                if (gs_unknown)
-                    p = safe_snprintf(p, end, ",null");
                 else
+                    p = safe_snprintf(p, end, ",null");
+
+                if (gs_valid)
                     p = safe_snprintf(p, end, ",%.1f", trace->gs / 10.0);
-
-                if (track_unknown)
-                    p = safe_snprintf(p, end, ",null");
                 else
+                    p = safe_snprintf(p, end, ",null");
+
+                if (track_valid)
                     p = safe_snprintf(p, end, ",%.1f", trace->track / 10.0);
+                else
+                    p = safe_snprintf(p, end, ",null");
 
                 int bitfield = (leg_marker << 1) + (stale << 0);
-                p = safe_snprintf(p, end, ",%d],", bitfield);
+                p = safe_snprintf(p, end, ",%d", bitfield);
 
+                if (geom_rate_valid)
+                    p = safe_snprintf(p, end, ",%d", geom_rate);
+                else
+                    p = safe_snprintf(p, end, ",null");
+
+                p = safe_snprintf(p, end, "],");
         }
 
         p--; // remove last comma

@@ -1699,11 +1699,9 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         last = &(trace[a->trace_len-1]);
         float track_diff = fabs(track - last->track / 10.0);
 
-        int32_t last_alt = last->altitude & ((1<<21) - 1);
-        last_alt -= 100000; // restore actual altitude
+        int32_t last_alt = last->altitude * 25;
 
-        if (last->altitude & (1<<22))
-            was_ground = 1;
+        was_ground = last->flags.on_ground;
 
         if (on_ground != was_ground)
             goto save_state;
@@ -1763,33 +1761,38 @@ save_state:
         new->timestamp = now;
         new->gs = (int16_t) (10 * a->gs);
         new->track = (int16_t) (10 * track);
-        new->altitude = a->altitude_baro + 100000;
+        new->altitude = (int16_t) (a->altitude_baro / 25);
+        new->geom_rate = (int16_t) (a->geom_rate / 32);
 
-        if (new->altitude < 0 || new->altitude > 1000000) {
-            new->altitude = 0;
-            new->altitude |= (1<<23);
-        }
-        //int alt_unknown = altitude & (1<<23);
+        new->flags = (struct state_flags) { 0 };
 
-        //int stale = altitude & (1<<21);
+        /*
+           unsigned on_ground:1;
+           unsigned stale:1;
+           unsigned leg_marker:1;
+           unsigned altitude_valid:1;
+           unsigned gs_valid:1;
+           unsigned track_valid:1;
+           unsigned geom_rate_valid:1;
+        */
+
         if (now > a->seen_pos + 15 * 1000 || (last && now > last->timestamp + 500 * 1000))
-            new->altitude |= (1<<21);
+            new->flags.stale = 1;
 
-        //int on_ground = altitude & (1<<22);
         if (on_ground)
-            new->altitude |= (1<<22);
+            new->flags.on_ground = 1;
 
-        //int alt_unknown = altitude & (1<<23);
-        if (!trackDataValid(&a->altitude_baro_valid) || a->altitude_baro_reliable < 2)
-            new->altitude |= (1<<23);
+        if (trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= ALTITUDE_BARO_RELIABLE_MAX / 4)
+            new->flags.altitude_valid = 1;
 
-        // int gs_unknown = altitude & (1<<24);
-        if (!trackDataValid(&a->gs_valid))
-            new->altitude |= (1<<24);
+        if (trackDataValid(&a->gs_valid))
+            new->flags.gs_valid = 1;
 
-        //int track_unknown = altitude & (1<<25);
-        if (!track_valid)
-            new->altitude |= (1<<25);
+        if (trackDataValid(&a->geom_rate_valid))
+            new->flags.geom_rate_valid = 1;
+
+        if (track_valid)
+            new->flags.track_valid = 1;
 
         pthread_mutex_lock(&a->trace_mutex);
         (a->trace_len)++;

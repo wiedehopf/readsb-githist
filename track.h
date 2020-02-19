@@ -100,16 +100,40 @@ typedef struct
   uint64_t padding;
 } data_validity;
 
+struct state_flags
+{
+    unsigned on_ground:1;
+    unsigned stale:1;
+    unsigned leg_marker:1;
+    unsigned altitude_valid:1;
+    unsigned gs_valid:1;
+    unsigned track_valid:1;
+    unsigned geom_rate_valid:1;
+    int padding:9;
+} __attribute__ ((__packed__));
+
 /* Structure representing one point in the aircraft trace */
 struct state
 {
+  uint64_t timestamp:48;
+  struct state_flags flags; // 16 bits
+
   int32_t lat;
   int32_t lon;
-  uint64_t timestamp;
-  int32_t altitude;
+
+  int16_t altitude;
   int16_t gs;
   int16_t track;
-};
+  int16_t geom_rate;
+} __attribute__ ((__packed__));
+
+struct state_all
+{
+  char callsign[8]; // Flight number
+  int16_t altitude_geom;
+  addrtype_t addrtype:8; // highest priority address type seen for this aircraft
+  int16_t baro_rate;
+} __attribute__ ((__packed__));
 
 /* Structure used to describe the state of one tracked aircraft */
 struct aircraft
