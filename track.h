@@ -130,9 +130,89 @@ struct state
 struct state_all
 {
   char callsign[8]; // Flight number
+
   int16_t altitude_geom;
-  addrtype_t addrtype:8; // highest priority address type seen for this aircraft
   int16_t baro_rate;
+  int16_t ias;
+  int16_t tas;
+
+  uint16_t squawk; // Squawk
+  uint16_t category; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
+  int16_t nav_altitude_mcp; // FCU/MCP selected altitude
+  int16_t nav_altitude_fms; // FMS selected altitude
+
+  int16_t nav_qnh; // Altimeter setting (QNH/QFE), millibars
+  int16_t nav_heading; // target heading, degrees (0-359)
+  int16_t gs;
+  int16_t mach;
+
+  int16_t track; // Ground track
+  int16_t track_rate; // Rate of change of ground track, degrees/second
+  int16_t roll; // Roll angle, degrees right
+  int16_t mag_heading; // Magnetic heading
+
+  int16_t true_heading; // True heading
+  emergency_t emergency:8; // Emergency/priority status
+  airground_t airground:8; // air/ground status
+  addrtype_t addrtype:8; // highest priority address type seen for this aircraft
+  nav_modes_t nav_modes:8; // enabled modes (autopilot, vnav, etc)
+  nav_altitude_source_t nav_altitude_src:8;  // source of altitude used by automation
+  /*
+  int adsb_version; // ADS-B version (from ADS-B operational status); -1 means no ADS-B messages seen
+  int adsr_version; // As above, for ADS-R messages
+  int tisb_version; // As above, for TIS-B messages
+  */
+  int16_t version:8;
+  sil_type_t sil_type:8; // SIL supplement from TSS or opstatus
+
+  unsigned nic_a : 1; // NIC supplement A from opstatus
+  unsigned nic_c : 1; // NIC supplement C from opstatus
+  unsigned nic_baro : 1; // NIC baro supplement from TSS or opstatus
+  unsigned nac_p : 4; // NACp from TSS or opstatus
+  unsigned nac_v : 3; // NACv from airborne velocity or opstatus
+  unsigned sil : 2; // SIL from TSS or opstatus
+  unsigned gva : 2; // GVA from opstatus
+  unsigned sda : 2; // SDA from opstatus
+  unsigned alert : 1; // FS Flight status alert bit
+  unsigned spi : 1; // FS Flight status SPI (Special Position Identification) bit
+
+  unsigned callsign_valid:1;
+  unsigned altitude_baro_valid:1;
+  unsigned altitude_geom_valid:1;
+  unsigned geom_delta_valid:1;
+  unsigned gs_valid:1;
+  unsigned ias_valid:1;
+  unsigned tas_valid:1;
+  unsigned mach_valid:1;
+  unsigned track_valid:1;
+  unsigned track_rate_valid:1;
+  unsigned roll_valid:1;
+  unsigned mag_heading_valid:1;
+  unsigned true_heading_valid:1;
+  unsigned baro_rate_valid:1;
+  unsigned geom_rate_valid:1;
+  unsigned nic_a_valid:1;
+  unsigned nic_c_valid:1;
+  unsigned nic_baro_valid:1;
+  unsigned nac_p_valid:1;
+  unsigned nac_v_valid:1;
+  unsigned sil_valid:1;
+  unsigned gva_valid:1;
+  unsigned sda_valid:1;
+  unsigned squawk_valid:1;
+  unsigned emergency_valid:1;
+  unsigned airground_valid:1;
+  unsigned nav_qnh_valid:1;
+  unsigned nav_altitude_mcp_valid:1;
+  unsigned nav_altitude_fms_valid:1;
+  unsigned nav_altitude_src_valid:1;
+  unsigned nav_heading_valid:1;
+  unsigned nav_modes_valid:1;
+  unsigned cpr_odd_valid:1; // Last seen even CPR message
+  unsigned cpr_even_valid:1; // Last seen odd CPR message
+  unsigned position_valid:1;
+  unsigned alert_valid:1;
+  unsigned spi_valid:1;
 } __attribute__ ((__packed__));
 
 /* Structure used to describe the state of one tracked aircraft */
