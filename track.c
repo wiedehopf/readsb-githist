@@ -1776,7 +1776,7 @@ save_state:
            unsigned geom_rate_valid:1;
         */
 
-        if (now > a->seen_pos + 15 * 1000 || (last && now > last->timestamp + 500 * 1000))
+        if (now > a->seen_pos + 15 * 1000 || (last && now > last->timestamp + 400 * 1000))
             new->flags.stale = 1;
 
         if (on_ground)

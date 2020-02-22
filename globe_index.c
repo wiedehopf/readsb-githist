@@ -214,7 +214,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     recent = generateTraceJson(a, start_recent);
     // write recent trace to /run
 
-    if (a->trace_full_write > 122 || now > a->trace_next_fw) {
+    if (a->trace_full_write > 77 || now > a->trace_next_fw) {
         // write full trace to /run
 
         full = generateTraceJson(a, start24);
@@ -227,7 +227,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
             a->trace_next_fw = now + (GLOBE_OVERLAP - 60 - rand() % GLOBE_OVERLAP / 16) * 1000;
         }
 
-        if (write_history && a->trace_full_write > 2) {
+        if (write_history) {
             write_history = 2;
         }
 
