@@ -955,6 +955,10 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             con->address = strtok(connect_string, ",");
             con->port = strtok(NULL, ",");
             con->protocol = strtok(NULL, ",");
+            if (pthread_mutex_init(&con->mutex, NULL)) {
+                fprintf(stderr, "Unable to initialize connector mutex!\n");
+                exit(1);
+            }
             //fprintf(stderr, "%d %s\n", Modes.net_connectors_count, con->protocol);
             if (!con->address || !con->port || !con->protocol) {
                 fprintf(stderr, "--net-connector: Wrong format: %s\n", arg);

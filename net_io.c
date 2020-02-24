@@ -581,10 +581,6 @@ void modesInitNet(void) {
         else if (strcmp(con->protocol, "sbs_in_prio") == 0)
             con->service = sbs_in_prio;
 
-        if (pthread_mutex_init(&con->mutex, NULL)) {
-            fprintf(stderr, "Unable to initialize connector mutex!\n");
-            exit(1);
-        }
         pthread_mutex_lock(&con->mutex);
     }
     serviceReconnectCallback(now);
