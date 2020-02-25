@@ -1797,6 +1797,7 @@ save_state:
         pthread_mutex_lock(&a->trace_mutex);
         (a->trace_len)++;
         a->trace_write = 1;
+        a->trace_full_write++;
         pthread_mutex_unlock(&a->trace_mutex);
 
         resize_trace(a, now);

@@ -176,7 +176,7 @@ int globe_index_index(int index) {
 }
 
 
-void write_trace(struct aircraft *a, uint64_t now, int write_history) {
+void write_trace(struct aircraft *a, uint64_t now) {
     struct char_buffer recent;
     struct char_buffer full;
     struct char_buffer hist;
@@ -214,7 +214,7 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
     recent = generateTraceJson(a, start_recent);
     // write recent trace to /run
 
-    if (a->trace_full_write > 77 || now > a->trace_next_fw) {
+    if (a->trace_full_write > 103 || now > a->trace_next_fw) {
         // write full trace to /run
 
         full = generateTraceJson(a, start24);
@@ -227,13 +227,9 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
             a->trace_next_fw = now + (GLOBE_OVERLAP - 60 - rand() % GLOBE_OVERLAP / 16) * 1000;
         }
 
-        if (write_history) {
-            write_history = 2;
-        }
-
         a->trace_full_write = 0;
         //fprintf(stderr, "%06x\n", a->addr);
-        if (a->pos_set) {
+        if (a->pos_set && Modes.globe_history_dir) {
             shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
             shadow = malloc(shadow_size);
             memcpy(shadow, a, sizeof(struct aircraft));
@@ -241,33 +237,32 @@ void write_trace(struct aircraft *a, uint64_t now, int write_history) {
                 memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
         }
         if (a->trace_len == 0) {
-            a->trace_full_write = 0xdead - 1;
+            a->trace_full_write = 0xdead;
         }
-    }
 
-    a->trace_full_write++;
+        if (a->trace_len > 0 &&
+                Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
+            // write to permanent storage
 
-    if (a->trace_len > 0 && write_history == 2 &&
-            Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
-        // write to permanent storage
-
-        struct tm *utc = gmtime(&nowish);
-        utc->tm_sec = 0;
-        utc->tm_min = 0;
-        utc->tm_hour = 0;
-        uint64_t start_of_day = 1000 * (uint64_t) (timegm(utc) - 60);
+            struct tm *utc = gmtime(&nowish);
+            utc->tm_sec = 0;
+            utc->tm_min = 0;
+            utc->tm_hour = 0;
+            uint64_t start_of_day = 1000 * (uint64_t) (timegm(utc) - 60);
 
 
-        int start = -1;
-        for (int i = 0; i < a->trace_len; i++) {
-            if (a->trace[i].timestamp > start_of_day) {
-                start = i;
-                break;
+            int start = -1;
+            for (int i = 0; i < a->trace_len; i++) {
+                if (a->trace[i].timestamp > start_of_day) {
+                    start = i;
+                    break;
+                }
             }
+            if (start >= 0)
+                hist = generateTraceJson(a, start);
         }
-        if (start >= 0)
-            hist = generateTraceJson(a, start);
     }
+
 
     pthread_mutex_unlock(&a->trace_mutex);
 
@@ -447,7 +442,7 @@ void *load_state(void *arg) {
                 a->trace_next_fw = now + 1000 * (rand() % 120); // spread over 2 mins
                 a->trace_full_write = 0xc0ffee; // rewrite full history file
                 //a->trace_write = 1;
-                //write_trace(a, now, 0);
+                //write_trace(a, now);
             }
 
             if (pthread_mutex_init(&a->trace_mutex, NULL)) {
@@ -511,7 +506,7 @@ void *jsonTraceThreadEntryPoint(void *arg) {
         for (int j = start; j < end; j++) {
             for (a = Modes.aircrafts[j]; a; a = a->next) {
                 if (a->trace_write)
-                    write_trace(a, now, 1);
+                    write_trace(a, now);
             }
         }
 
