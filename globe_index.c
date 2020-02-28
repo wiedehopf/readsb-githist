@@ -531,7 +531,6 @@ static void mark_legs(struct aircraft *a) {
     int low = 100000;
 
     uint32_t focus = 0xfffffff;
-    //focus = 0x3c5465;
 
     double sum = 0;
 
@@ -558,7 +557,12 @@ static void mark_legs(struct aircraft *a) {
         sum += altitude;
     }
 
-    int threshold = (int) sum / a->trace_len / 3;
+    int threshold = (int) (sum / (double) (a->trace_len * 3));
+
+    if (a->addr == focus) {
+        fprintf(stderr, "threshold: %d\n", threshold);
+    }
+
 
     if (threshold > 10000)
         threshold = 10000;
