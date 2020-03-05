@@ -543,7 +543,7 @@ static void mark_legs(struct aircraft *a) {
         int altitude_valid = a->trace[i].flags.altitude_valid;
 
         if (a->trace[i].flags.leg_marker) {
-            a->trace[i].flags.leg_marker = 1;
+            a->trace[i].flags.leg_marker = 0;
             // reset leg marker
             last_leg = &a->trace[i];
         }
@@ -656,10 +656,16 @@ static void mark_legs(struct aircraft *a) {
         {
             leg_ground = 1;
         }
+        int leg_float = 0;
+        if (major_climb && major_descent && major_climb >= major_descent + 12 * 60 * 1000) {
+            for (int i = major_descent_index; i < major_climb_index; i++) {
+                if (a->trace[i].timestamp > a->trace[i-1].timestamp + 6 * 60 * 1000)
+                leg_float = 1;
+            }
+        }
 
-        if ( (major_climb && major_descent && major_climb >= major_descent + 10 * 60 * 1000) ||
-                leg_ground
-           )
+
+        if (leg_float || leg_ground)
         {
             uint64_t leg_ts = 0;
 
