@@ -1762,7 +1762,6 @@ save_state:
         new->gs = (int16_t) (10 * a->gs);
         new->track = (int16_t) (10 * track);
         new->altitude = (int16_t) (a->altitude_baro / 25);
-        new->geom_rate = (int16_t) (a->geom_rate / 32);
 
         new->flags = (struct state_flags) { 0 };
 
@@ -1773,7 +1772,8 @@ save_state:
            unsigned altitude_valid:1;
            unsigned gs_valid:1;
            unsigned track_valid:1;
-           unsigned geom_rate_valid:1;
+           unsigned rate_valid:1;
+           unsigned rate_geom:1;
         */
 
         if (now > a->seen_pos + 15 * 1000 || (last && now > last->timestamp + 400 * 1000))
@@ -1788,8 +1788,18 @@ save_state:
         if (trackDataValid(&a->gs_valid))
             new->flags.gs_valid = 1;
 
-        if (trackDataValid(&a->geom_rate_valid))
-            new->flags.geom_rate_valid = 1;
+        if (trackDataValid(&a->geom_rate_valid)) {
+            new->flags.rate_valid = 1;
+            new->flags.rate_geom = 1;
+            new->rate = (int16_t) (a->geom_rate / 32);
+        } else if (trackDataValid(&a->baro_rate_valid)) {
+            new->rate = (int16_t) (a->baro_rate / 32);
+            new->flags.rate_valid = 1;
+            new->flags.rate_geom = 0;
+        } else {
+            new->rate = 0;
+            new->flags.rate_valid = 0;
+        }
 
         if (track_valid)
             new->flags.track_valid = 1;

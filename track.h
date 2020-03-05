@@ -108,8 +108,9 @@ struct state_flags
     unsigned altitude_valid:1;
     unsigned gs_valid:1;
     unsigned track_valid:1;
-    unsigned geom_rate_valid:1;
-    int padding:9;
+    unsigned rate_valid:1;
+    unsigned rate_geom:1;
+    int padding:8;
 } __attribute__ ((__packed__));
 
 /* Structure representing one point in the aircraft trace */
@@ -124,7 +125,7 @@ struct state
   int16_t altitude;
   int16_t gs;
   int16_t track;
-  int16_t geom_rate;
+  int16_t rate;
 } __attribute__ ((__packed__));
 
 struct state_all

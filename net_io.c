@@ -2088,8 +2088,9 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start) {
             struct state *trace = &a->trace[i];
 
             int32_t altitude = trace->altitude * 25;
-            int32_t geom_rate = trace->geom_rate * 32;
-            int geom_rate_valid = trace->flags.geom_rate_valid;
+            int32_t rate = trace->rate * 32;
+            int rate_valid = trace->flags.rate_valid;
+            int rate_geom = trace->flags.rate_geom;
             int stale = trace->flags.stale;
             int on_ground = trace->flags.on_ground;
             int altitude_valid = trace->flags.altitude_valid;
@@ -2118,11 +2119,11 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start) {
                 else
                     p = safe_snprintf(p, end, ",null");
 
-                int bitfield = (leg_marker << 1) + (stale << 0);
+                int bitfield = (rate_geom << 2) | (leg_marker << 1) | (stale << 0);
                 p = safe_snprintf(p, end, ",%d", bitfield);
 
-                if (geom_rate_valid)
-                    p = safe_snprintf(p, end, ",%d", geom_rate);
+                if (rate_valid)
+                    p = safe_snprintf(p, end, ",%d", rate);
                 else
                     p = safe_snprintf(p, end, ",null");
 
