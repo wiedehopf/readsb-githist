@@ -1647,7 +1647,7 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
     //fprintf(stderr, "globe: (%.2f, %.2f)\n", new_lat, new_lon);
 
-    if (!trackDataValid(&a->track_valid) && a->pos_set) {
+    if (trackDataAge(now, &a->track_valid) >= 10000 && a->pos_set) {
         double distance = greatcircle(a->lat, a->lon, new_lat, new_lon);
         if (distance > 100)
             a->calc_track = bearing(a->lat, a->lon, new_lat, new_lon);
@@ -1760,7 +1760,6 @@ save_state:
         new->lon = (int32_t) (new_lon * 1E6);
         new->timestamp = now;
         new->gs = (int16_t) (10 * a->gs);
-        new->track = (int16_t) (10 * track);
         new->altitude = (int16_t) (a->altitude_baro / 25);
 
         new->flags = (struct state_flags) { 0 };
@@ -1801,8 +1800,12 @@ save_state:
             new->flags.rate_valid = 0;
         }
 
-        if (track_valid)
+        if (track_valid) {
+            new->track = (int16_t) (10 * track);
             new->flags.track_valid = 1;
+        } else {
+            new->track = (int16_t) (10 * a->calc_track);
+        }
 
         pthread_mutex_lock(&a->trace_mutex);
         (a->trace_len)++;
