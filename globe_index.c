@@ -324,7 +324,8 @@ void write_trace(struct aircraft *a, uint64_t now) {
         int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         int res;
         res = write(fd, shadow, shadow_size);
-        res++;
+        if (res < 0)
+            perror(filename);
         close(fd);
     }
     free(shadow);
@@ -351,7 +352,8 @@ void *save_state(void *arg) {
             res = write(fd, a, sizeof(struct aircraft));
             if (a->trace_len > 0)
                 res = write(fd, a->trace, a->trace_len * sizeof(struct state));
-            res++;
+            if (res < 0)
+                perror(filename);
             /*
                size_t shadow_size = 0;
                char *shadow = NULL;
