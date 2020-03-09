@@ -1680,12 +1680,12 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         int was_ground = 0;
         float turn_density = 5;
         float track = a->track;
-        int track_valid = trackDataValid(&a->track_valid);
+        int track_valid = trackDataAge(now, &a->track_valid) < 10000;
         struct state *last = NULL;
 
         if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND) {
             on_ground = 1;
-            if (trackDataValid(&a->true_heading_valid)) {
+            if (trackDataAge(now, &a->true_heading_valid) < 10000) {
                 track = a->true_heading;
                 track_valid = 1;
             } else {
