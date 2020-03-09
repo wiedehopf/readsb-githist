@@ -1782,20 +1782,20 @@ save_state:
         if (on_ground)
             new->flags.on_ground = 1;
 
-        if (trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= ALTITUDE_BARO_RELIABLE_MAX / 4)
+        if (trackDataAge(now, &a->altitude_baro_valid) < 5000 && a->altitude_baro_reliable >= ALTITUDE_BARO_RELIABLE_MAX / 4)
             new->flags.altitude_valid = 1;
 
         if (trackDataValid(&a->gs_valid))
             new->flags.gs_valid = 1;
 
-        if (trackDataValid(&a->geom_rate_valid)) {
+        if (trackDataAge(now, &a->geom_rate_valid) < 5000) {
             new->flags.rate_valid = 1;
             new->flags.rate_geom = 1;
             new->rate = (int16_t) (a->geom_rate / 32);
-        } else if (trackDataValid(&a->baro_rate_valid)) {
-            new->rate = (int16_t) (a->baro_rate / 32);
+        } else if (trackDataAge(now, &a->baro_rate_valid) < 5000) {
             new->flags.rate_valid = 1;
             new->flags.rate_geom = 0;
+            new->rate = (int16_t) (a->baro_rate / 32);
         } else {
             new->rate = 0;
             new->flags.rate_valid = 0;
