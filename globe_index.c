@@ -229,7 +229,7 @@ void write_trace(struct aircraft *a, uint64_t now) {
 
         a->trace_full_write = 0;
         //fprintf(stderr, "%06x\n", a->addr);
-        if (a->pos_set && Modes.globe_history_dir) {
+        if (a->pos_set && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
             shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
             shadow = malloc(shadow_size);
             memcpy(shadow, a, sizeof(struct aircraft));
@@ -389,7 +389,7 @@ void *load_state(void *arg) {
             continue;
 
         while ((ep = readdir (dp))) {
-            if (strlen(ep->d_name) != 6)
+            if (strlen(ep->d_name) < 6)
                 continue;
             snprintf(pathbuf, PATH_MAX, "%s/internal_state/%02x/%s", Modes.globe_history_dir, i, ep->d_name);
 
@@ -453,6 +453,9 @@ void *load_state(void *arg) {
             Modes.stats_current.unique_aircraft++;
 
             close(fd);
+
+            if (a->seen > now)
+                a->seen = 0;
 
             a->next = Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS]; // .. and put it at the head of the list
             Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS] = a;
@@ -566,6 +569,8 @@ static void mark_legs(struct aircraft *a) {
 
     if (threshold > 10000)
         threshold = 10000;
+    if (threshold < 200)
+        threshold = 200;
 
     high = 0;
     low = 100000;
@@ -614,11 +619,11 @@ static void mark_legs(struct aircraft *a) {
         }
         */
 
-        if (abs(low - altitude) < 800) {
+        if (abs(low - altitude) < threshold * 2 / 3) {
             last_low = state->timestamp;
             last_low_index = i;
         }
-        if (abs(high - altitude) < 800)
+        if (abs(high - altitude) < threshold * 2 / 3)
             last_high = state->timestamp;
 
         if (high - low > threshold) {
@@ -634,8 +639,7 @@ static void mark_legs(struct aircraft *a) {
                     fprintf(stderr, "climb: %d %s\n", altitude, tstring);
                 }
                 low = high - threshold * 9/10;
-            }
-            if (last_high < last_low) {
+            } else if (last_high < last_low) {
                 int bla = max(0, i - 3);
                 major_descent = a->trace[bla].timestamp;
                 major_descent_index = bla;
@@ -704,6 +708,8 @@ static void mark_legs(struct aircraft *a) {
             major_climb_index = 0;
             major_descent = 0;
             major_descent_index = 0;
+            low += threshold;
+            high -= threshold;
 
             if (a->addr == focus) {
                 time_t nowish = leg_ts/1000;
