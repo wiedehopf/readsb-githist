@@ -201,7 +201,7 @@ static int compare_validity(const data_validity *lhs, const data_validity *rhs) 
 // This has up to 0.5% error because the earth isn't actually spherical
 // (but we don't use it in situations where that matters)
 
-static double greatcircle(double lat0, double lon0, double lat1, double lon1) {
+double greatcircle(double lat0, double lon0, double lat1, double lon1) {
     double dlat, dlon;
 
     lat0 = lat0 * M_PI / 180.0;

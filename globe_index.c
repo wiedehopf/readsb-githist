@@ -655,13 +655,25 @@ static void mark_legs(struct aircraft *a) {
                 high = low + threshold * 9/10;
             }
         }
-        int leg_ground = 0;
+        int leg_now = 0;
         if ( (major_descent && (on_ground || was_ground) && state->timestamp > a->trace[i-1].timestamp + 25 * 60 * 1000) ||
                 (major_descent && (on_ground || was_ground) && state->timestamp > last_airborne + 45 * 60 * 1000)
            )
         {
-            leg_ground = 1;
+            leg_now = 1;
         }
+
+        if (a->trace[i].timestamp > a->trace[i-1].timestamp + 30 * 60 * 1000
+                && greatcircle(
+                    (double) a->trace[i].lat / 1E6,
+                    (double) a->trace[i].lon / 1E6,
+                    (double) a->trace[i-1].lat / 1E6,
+                    (double) a->trace[i-1].lon / 1E6
+                    ) < 30E3
+           ) {
+            leg_now = 1;
+        }
+
         int leg_float = 0;
         if (major_climb && major_descent && major_climb >= major_descent + 12 * 60 * 1000) {
             for (int i = major_descent_index; i < major_climb_index; i++) {
@@ -671,11 +683,11 @@ static void mark_legs(struct aircraft *a) {
         }
 
 
-        if (leg_float || leg_ground)
+        if (leg_float || leg_now)
         {
             uint64_t leg_ts = 0;
 
-            if (leg_ground) {
+            if (leg_now) {
                 new_leg = &a->trace[i];
             } else if (major_descent_index + 1 == major_climb_index) {
                 new_leg = &a->trace[major_climb_index];

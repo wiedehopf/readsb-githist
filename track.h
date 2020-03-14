@@ -416,6 +416,9 @@ trackDataAge (uint64_t now, const data_validity *v)
   return (now - v->updated);
 }
 
+// calculate great circle distance in meters
+double greatcircle(double lat0, double lon0, double lat1, double lon1);
+
 /* Update aircraft state from data in the provided mesage.
  * Return the tracked aircraft.
  */
