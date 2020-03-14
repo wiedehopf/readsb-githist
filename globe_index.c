@@ -591,6 +591,9 @@ static void mark_legs(struct aircraft *a) {
 
     for (int i = 1; i < a->trace_len; i++) {
         struct state *state = &a->trace[i];
+        struct state *prev = &a->trace[i-1];
+
+        uint64_t elapsed = state->timestamp - prev->timestamp;
 
         int32_t altitude = state->altitude * 25;
         //int32_t geom_rate = state->geom_rate * 32;
@@ -656,20 +659,20 @@ static void mark_legs(struct aircraft *a) {
             }
         }
         int leg_now = 0;
-        if ( (major_descent && (on_ground || was_ground) && state->timestamp > a->trace[i-1].timestamp + 25 * 60 * 1000) ||
+        if ( (major_descent && (on_ground || was_ground) && elapsed > 25 * 60 * 1000) ||
                 (major_descent && (on_ground || was_ground) && state->timestamp > last_airborne + 45 * 60 * 1000)
            )
         {
             leg_now = 1;
         }
 
-        if (a->trace[i].timestamp > a->trace[i-1].timestamp + 30 * 60 * 1000
+        if ( elapsed > 30 * 60 * 1000
                 && greatcircle(
                     (double) a->trace[i].lat / 1E6,
                     (double) a->trace[i].lon / 1E6,
                     (double) a->trace[i-1].lat / 1E6,
                     (double) a->trace[i-1].lon / 1E6
-                    ) < 30E3
+                    ) < 10E3 * (double) elapsed / (30 * 60 * 1000)
            ) {
             leg_now = 1;
         }
