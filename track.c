@@ -143,7 +143,20 @@ static int accept_data(data_validity *d, datasource_t source, struct modesMessag
     if (source < d->source && receiveTime < d->updated + TRACK_STALE)
         return 0;
 
-    d->source = source;
+    // prevent JAERO and other SBS from disrupting
+    // other data sources too quickly
+    if (source != SOURCE_MODE_S && source <= SOURCE_JAERO && source != d->source) {
+        if (source != SOURCE_JAERO && receiveTime - d->updated < 60 * 1000)
+            return 0;
+        if (source == SOURCE_JAERO && receiveTime - d->updated < 300 * 1000)
+            return 0;
+    }
+
+    if (source == SOURCE_PRIO)
+        d->source = SOURCE_ADSB;
+    else
+        d->source = source;
+
     d->updated = receiveTime;
     d->stale = 0;
 
@@ -1326,7 +1339,8 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     if (mm->sbs_in && mm->sbs_pos_valid) {
         if (trackDataValid(&a->position_valid)
                 && mm->source <= a->position_valid.source
-                && !speed_check(a, mm->decoded_lat, mm->decoded_lon, (mm->airground == AG_GROUND))
+                && !speed_check(a, mm->decoded_lat, mm->decoded_lon, (a->airground == AG_GROUND))
+                && mm->source != SOURCE_PRIO
            )
         {
             if (mm->source == a->position_valid.source) {

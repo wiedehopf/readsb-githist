@@ -137,10 +137,10 @@ typedef enum
   SOURCE_INVALID, /* data is not valid */
   SOURCE_INDIRECT, /* data is of unknown quality */
   SOURCE_MODE_AC, /* A/C message */
-  SOURCE_SBS, /* data is of unknown quality */
-  SOURCE_MLAT, /* derived from mlat */
   SOURCE_MODE_S, /* data from a Mode S message, no full CRC */
+  SOURCE_SBS, /* data is of unknown quality */
   SOURCE_JAERO, /* data is from satellite ADS-C */
+  SOURCE_MLAT, /* derived from mlat */
   SOURCE_MODE_S_CHECKED, /* data from a Mode S message with full CRC */
   SOURCE_TISB, /* data from a TIS-B extended squitter message */
   SOURCE_ADSR, /* data from a ADS-R extended squitter message */
