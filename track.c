@@ -1222,6 +1222,8 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         // If our current state is certain but new data is not, only accept the uncertain state if the certain data has gone stale
         if (mm->airground != AG_UNCERTAIN ||
                 (mm->airground == AG_UNCERTAIN && now > a->airground_valid.updated + 60 * 1000)) {
+            if (mm->airground != a->airground)
+                mm->reduce_forward = 1;
             if (accept_data(&a->airground_valid, mm->source, mm, 0)) {
                 a->airground = mm->airground;
             }
