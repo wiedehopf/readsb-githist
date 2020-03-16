@@ -605,7 +605,7 @@ static void mark_legs(struct aircraft *a) {
         //int track_valid = state->flags.track_valid;
         //int leg_marker = state->flags.leg_marker;
         //
-        if (!altitude_valid)
+        if (!on_ground && !altitude_valid)
             continue;
 
         if (on_ground)
