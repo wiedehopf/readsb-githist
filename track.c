@@ -1702,6 +1702,8 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
         int track_valid = trackDataAge(now, &a->track_valid) < 10000;
         struct state *last = NULL;
 
+        int save_state = 1;
+
         if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND) {
             on_ground = 1;
             if (trackDataAge(now, &a->true_heading_valid) < 10000) {
@@ -1722,8 +1724,18 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         was_ground = last->flags.on_ground;
 
-        if (on_ground != was_ground)
+        if (on_ground != was_ground) {
+            // if the last position wasn't added to the trace, add it now.
+            if (a->trace_pos_discarded) {
+                pthread_mutex_lock(&a->trace_mutex);
+                (a->trace_len)++;
+                pthread_mutex_unlock(&a->trace_mutex);
+
+                resize_trace(a, now);
+                new = &(trace[a->trace_len]);
+            }
             goto save_state;
+        }
 
         if (now > last->timestamp + 300 * 1000 )
             goto save_state;
@@ -1770,11 +1782,10 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             goto save_state;
         }
 
-        goto no_save_state;
+no_save_state:
+        save_state = 0;
 save_state:
 
-        a->trace_llat = new_lat;
-        a->trace_llon = new_lon;
         new->lat = (int32_t) (new_lat * 1E6);
         new->lon = (int32_t) (new_lon * 1E6);
         new->timestamp = now;
@@ -1826,18 +1837,24 @@ save_state:
             new->track = (int16_t) (10 * a->calc_track);
         }
 
-        pthread_mutex_lock(&a->trace_mutex);
-        (a->trace_len)++;
-        a->trace_write = 1;
-        a->trace_full_write++;
-        pthread_mutex_unlock(&a->trace_mutex);
+        if (save_state) {
+            a->trace_pos_discarded = 0;
 
-        resize_trace(a, now);
+            a->trace_llat = new_lat;
+            a->trace_llon = new_lon;
+
+            pthread_mutex_lock(&a->trace_mutex);
+            (a->trace_len)++;
+            a->trace_write = 1;
+            a->trace_full_write++;
+            pthread_mutex_unlock(&a->trace_mutex);
+
+            resize_trace(a, now);
+        } else {
+            a->trace_pos_discarded = 1;
+        }
 
         //fprintf(stderr, "Added to trace for %06X (%d).\n", a->addr, a->trace_len);
-
-no_save_state:
-        ;
     }
 
     a->seen_pos = now;
@@ -1916,10 +1933,10 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
         return;
     }
 
-    if (a->trace_len == GLOBE_TRACE_SIZE || now > trace->timestamp + (24 * 3600 + GLOBE_OVERLAP * 2) * 1000) {
+    if (a->trace_len == GLOBE_TRACE_SIZE - 2 || now > trace->timestamp + (24 * 3600 + GLOBE_OVERLAP * 2) * 1000) {
         int new_start = a->trace_len;
 
-        if (a->trace_len < GLOBE_TRACE_SIZE) {
+        if (a->trace_len < GLOBE_TRACE_SIZE - 2) {
             int found = 0;
             for (int i = 0; i < a->trace_len; i++) {
                 struct state *state = &a->trace[i];
@@ -1932,14 +1949,18 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
             if (!found)
                 new_start = a->trace_len;
         }
-        if (a->trace_len == GLOBE_TRACE_SIZE) {
+        if (a->trace_len == GLOBE_TRACE_SIZE - 2) {
             new_start = GLOBE_TRACE_SIZE / 64;
         }
 
         pthread_mutex_lock(&a->trace_mutex);
 
         a->trace_len -= new_start;
-        memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
+
+        if (a->trace_pos_discarded)
+            memmove(trace, trace + new_start, (a->trace_len + 1) * sizeof(struct state));
+        else
+            memmove(trace, trace + new_start, a->trace_len * sizeof(struct state));
 
         //a->trace_write = 1;
         //a->trace_full_write = 9999; // rewrite full history file

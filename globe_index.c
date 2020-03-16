@@ -459,6 +459,8 @@ void *load_state(void *arg) {
             if (a->seen > now)
                 a->seen = 0;
 
+            a->trace_pos_discarded = 0;
+
             a->next = Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS]; // .. and put it at the head of the list
             Modes.aircrafts[a->addr % AIRCRAFTS_BUCKETS] = a;
         }

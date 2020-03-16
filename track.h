@@ -324,8 +324,9 @@ struct aircraft
   unsigned sda : 2; // SDA from opstatus
   unsigned alert : 1; // FS Flight status alert bit
   unsigned spi : 1; // FS Flight status SPI (Special Position Identification) bit
-  // 18 bit ??
-  unsigned padding_b : 14;
+  unsigned trace_pos_discarded : 1; // last unique position was not used for the trace
+  // 19 bit ??
+  unsigned padding_b : 13;
   // 32 bit !!
 
   // ----
