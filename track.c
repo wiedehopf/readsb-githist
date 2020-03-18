@@ -574,13 +574,15 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
             if (accept_data(&a->position_valid, mm->source, mm, 1)) {
                 Modes.stats_current.cpr_global_ok++;
 
+                int persist = Modes.filter_persistence * (1 + (mm->source == SOURCE_MLAT));
+
                 if (a->pos_reliable_odd <= 0 || a->pos_reliable_even <=0) {
                     a->pos_reliable_odd = 1;
                     a->pos_reliable_even = 1;
                 } else if (mm->cpr_odd) {
-                    a->pos_reliable_odd = min(a->pos_reliable_odd + 1, Modes.filter_persistence);
+                    a->pos_reliable_odd = min(a->pos_reliable_odd + 1, persist);
                 } else {
-                    a->pos_reliable_even = min(a->pos_reliable_even + 1, Modes.filter_persistence);
+                    a->pos_reliable_even = min(a->pos_reliable_even + 1, persist);
                 }
 
                 if (trackDataValid(&a->gs_valid))
@@ -1364,8 +1366,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
                 a->pos_reliable_odd = 2;
                 a->pos_reliable_even = 2;
             } else {
-                a->pos_reliable_odd = min(a->pos_reliable_odd + 1, Modes.filter_persistence);
-                a->pos_reliable_even = min(a->pos_reliable_even + 1, Modes.filter_persistence);
+                int persist = Modes.filter_persistence * (1 + (mm->source == SOURCE_MLAT));
+                a->pos_reliable_odd = min(a->pos_reliable_odd + 1, persist);
+                a->pos_reliable_even = min(a->pos_reliable_even + 1, persist);
             }
 
             if (a->messages < 2)
