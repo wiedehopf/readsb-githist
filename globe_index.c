@@ -627,16 +627,16 @@ static void mark_legs(struct aircraft *a) {
         }
         */
 
-        if (abs(low - altitude) < threshold * 2 / 3) {
+        if (abs(low - altitude) < threshold * 1 / 3) {
             last_low = state->timestamp;
             last_low_index = i;
         }
-        if (abs(high - altitude) < threshold * 2 / 3)
+        if (abs(high - altitude) < threshold * 1 / 3)
             last_high = state->timestamp;
 
         if (high - low > threshold) {
             if (last_high > last_low) {
-                int bla = max(0, last_low_index + 3);
+                int bla = last_low_index + 3;
                 major_climb = a->trace[bla].timestamp;
                 major_climb_index = bla;
                 if (a->addr == focus) {
@@ -648,7 +648,7 @@ static void mark_legs(struct aircraft *a) {
                 }
                 low = high - threshold * 9/10;
             } else if (last_high < last_low) {
-                int bla = max(0, i - 3);
+                int bla = max(0, last_low_index - 3);
                 major_descent = a->trace[bla].timestamp;
                 major_descent_index = bla;
                 if (a->addr == focus) {
@@ -666,6 +666,8 @@ static void mark_legs(struct aircraft *a) {
                 (major_descent && (on_ground || was_ground) && state->timestamp > last_airborne + 45 * 60 * 1000)
            )
         {
+            if (a->addr == focus)
+                fprintf(stderr, "ground leg\n");
             leg_now = 1;
         }
 
@@ -678,13 +680,17 @@ static void mark_legs(struct aircraft *a) {
                     ) < 10E3 * (double) elapsed / (30 * 60 * 1000)
            ) {
             leg_now = 1;
+            if (a->addr == focus)
+                fprintf(stderr, "elapsed leg\n");
         }
 
         int leg_float = 0;
-        if (major_climb && major_descent && major_climb >= major_descent + 12 * 60 * 1000) {
+        if (major_climb && major_descent && major_climb > major_descent + 12 * 60 * 1000) {
             for (int i = major_descent_index; i < major_climb_index; i++) {
-                if (a->trace[i].timestamp > a->trace[i-1].timestamp + 6 * 60 * 1000)
+                if (a->trace[i+1].timestamp > a->trace[i].timestamp + 6 * 60 * 1000)
                 leg_float = 1;
+                if (a->addr == focus)
+                    fprintf(stderr, "float leg\n");
             }
         }
 
