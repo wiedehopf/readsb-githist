@@ -703,6 +703,7 @@ static void cleanup_and_exit(int code) {
                     free(a->first_message);
                 if (a->trace) {
                     free(a->trace);
+                    free(a->trace_all);
                 }
 
                 free(a);

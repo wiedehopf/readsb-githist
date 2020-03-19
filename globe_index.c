@@ -230,11 +230,21 @@ void write_trace(struct aircraft *a, uint64_t now) {
         a->trace_full_write = 0;
         //fprintf(stderr, "%06x\n", a->addr);
         if (a->pos_set && Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
-            shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
+            int size_state = a->trace_len * sizeof(struct state);
+            int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
+            shadow_size = sizeof(struct aircraft) + size_state + size_all;
+
             shadow = malloc(shadow_size);
-            memcpy(shadow, a, sizeof(struct aircraft));
-            if (a->trace_len > 0)
-                memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
+            char *start = shadow;
+
+            memcpy(start, a, sizeof(struct aircraft));
+            start += sizeof(struct aircraft);
+            if (a->trace_len > 0) {
+                memcpy(start, a->trace, size_state);
+                start += size_state;
+                memcpy(start, a->trace_all, size_all);
+                start += size_all;
+            }
         }
         if (a->trace_len == 0) {
             a->trace_full_write = 0xdead;
@@ -350,21 +360,15 @@ void *save_state(void *arg) {
             int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             int res;
             res = write(fd, a, sizeof(struct aircraft));
-            if (a->trace_len > 0)
-                res = write(fd, a->trace, a->trace_len * sizeof(struct state));
+            if (a->trace_len > 0) {
+                int size_state = a->trace_len * sizeof(struct state);
+                int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
+                res = write(fd, a->trace, size_state);
+                res = write(fd, a->trace_all, size_all);
+            }
             if (res < 0)
                 perror(filename);
-            /*
-               size_t shadow_size = 0;
-               char *shadow = NULL;
-               shadow_size = sizeof(struct aircraft) + a->trace_len * sizeof(struct state);
-               shadow = malloc(shadow_size);
-               memcpy(shadow, a, sizeof(struct aircraft));
-               if (a->trace_len > 0)
-               memcpy(shadow + sizeof(struct aircraft), a->trace, a->trace_len * sizeof(struct state));
 
-               res = write(fd, shadow, shadow_size);
-               */
             close(fd);
         }
     }
@@ -400,12 +404,6 @@ void *load_state(void *arg) {
             fstat(fd, &fileinfo);
             off_t len = fileinfo.st_size;
             int trace_size = len - sizeof(struct aircraft);
-            if (trace_size % sizeof(struct state) != 0) {
-                fprintf(stderr, "filesize mismatch\n");
-                close(fd);
-                unlink(pathbuf);
-                continue;
-            }
             struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
 
             if (read(fd, a, sizeof(struct aircraft)) != sizeof(struct aircraft) ||
@@ -422,20 +420,27 @@ void *load_state(void *arg) {
                 continue;
             }
 
+            int size_state = a->trace_len * sizeof(struct state);
+            int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
+
+            if (trace_size != size_state + size_all) {
+                fprintf(stderr, "trace_size mismatch\n");
+                free(a);
+                close(fd);
+                unlink(pathbuf);
+                continue;
+            }
+
             a->first_message = NULL;
 
             if (a->trace_alloc > 0) {
-                if ((uint32_t) a->trace_len != trace_size / sizeof(struct state)) {
-                    fprintf(stderr, "trace_len mismatch\n");
-                    free(a);
-                    close(fd);
-                    unlink(pathbuf);
-                    continue;
-                }
                 a->trace = malloc(a->trace_alloc * sizeof(struct state));
-                if (read(fd, a->trace, trace_size) != trace_size) {
+                a->trace_all = malloc(a->trace_alloc / 4 * sizeof(struct state_all));
+                if (read(fd, a->trace, size_state) != size_state
+                        || read(fd, a->trace_all, size_all) != size_all) {
                     fprintf(stderr, "read trace fail\n");
                     free(a->trace);
+                    free(a->trace_all);
                     free(a);
                     close(fd);
                     unlink(pathbuf);

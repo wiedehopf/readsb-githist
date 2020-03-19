@@ -283,7 +283,7 @@ typedef enum {
 
 #define GLOBE_TRACE_SIZE 32768
 #define GLOBE_OVERLAP 3600
-#define GLOBE_STEP 128
+#define GLOBE_STEP 256
 #define TRACE_THREADS 4
 
 // Include subheaders after all the #defines are in place

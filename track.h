@@ -234,14 +234,16 @@ struct aircraft
   int altitude_geom; // Altitude (Geometric)
   int geom_delta; // Difference between Geometric and Baro altitudes
 
+  // ----
+
   double signalLevel[8]; // Last 8 Signal Amplitudes
 
   // ----
 
   pthread_mutex_t trace_mutex; // 5*8bytes
   struct state *trace; // array of positions representing the aircrafts trace/trail
-  double trace_llat; // last saved lat
-  double trace_llon; // last saved lon
+  struct state_all *trace_all;
+  double padding1_01;
 
   // ----
 
@@ -249,15 +251,29 @@ struct aircraft
   int trace_write; // signal for writing the trace
   int trace_full_write; // signal for writing the complete trace
   int trace_alloc; // current number of allocated points
+  double trace_llat; // last saved lat
+  double trace_llon; // last saved lon
+
   uint64_t trace_next_fw;
+  double padding2_01;
+  double padding2_02;
+  double padding2_03;
+
+  // ----
+
   unsigned pos_nic; // NIC of last computed position
   unsigned pos_rc; // Rc of last computed position
-
   double lat, lon; // Coordinates obtained from CPR encoded data
   int pos_reliable_odd; // Number of good global CPRs, indicates position reliability
   int pos_reliable_even;
   int pos_set;
   float gs_last_pos; // Save a groundspeed associated with the last position
+
+  double padding3_01;
+  double padding3_02;
+  double padding3_03;
+  double padding3_04;
+
 
   // ----
 
@@ -324,7 +340,7 @@ struct aircraft
   unsigned sda : 2; // SDA from opstatus
   unsigned alert : 1; // FS Flight status alert bit
   unsigned spi : 1; // FS Flight status SPI (Special Position Identification) bit
-  unsigned trace_pos_discarded : 1; // last unique position was not used for the trace
+  unsigned trace_pos_discarded : 1; // unused
   // 19 bit ??
   unsigned padding_b : 13;
   // 32 bit !!
