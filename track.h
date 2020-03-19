@@ -134,11 +134,9 @@ struct state_all
 
   int16_t altitude_geom;
   int16_t baro_rate;
-  int16_t ias;
-  int16_t tas;
+  int16_t geom_rate;
 
   uint16_t squawk; // Squawk
-  uint16_t category; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
   int16_t nav_altitude_mcp; // FCU/MCP selected altitude
   int16_t nav_altitude_fms; // FMS selected altitude
 
@@ -151,20 +149,23 @@ struct state_all
   int16_t track_rate; // Rate of change of ground track, degrees/second
   int16_t roll; // Roll angle, degrees right
   int16_t mag_heading; // Magnetic heading
-
   int16_t true_heading; // True heading
+
+  unsigned category:8; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
+
   emergency_t emergency:8; // Emergency/priority status
   airground_t airground:8; // air/ground status
   addrtype_t addrtype:8; // highest priority address type seen for this aircraft
   nav_modes_t nav_modes:8; // enabled modes (autopilot, vnav, etc)
   nav_altitude_source_t nav_altitude_src:8;  // source of altitude used by automation
-  /*
-  int adsb_version; // ADS-B version (from ADS-B operational status); -1 means no ADS-B messages seen
-  int adsr_version; // As above, for ADS-R messages
-  int tisb_version; // As above, for TIS-B messages
-  */
-  int16_t version:8;
   sil_type_t sil_type:8; // SIL supplement from TSS or opstatus
+
+  unsigned tas:12;
+  unsigned ias:12;
+
+  unsigned adsb_version:3; // ADS-B version (from ADS-B operational status); -1 means no ADS-B messages seen
+  unsigned adsr_version:3; // As above, for ADS-R messages
+  unsigned tisb_version:3; // As above, for TIS-B messages
 
   unsigned nic_a : 1; // NIC supplement A from opstatus
   unsigned nic_c : 1; // NIC supplement C from opstatus
@@ -209,8 +210,6 @@ struct state_all
   unsigned nav_altitude_src_valid:1;
   unsigned nav_heading_valid:1;
   unsigned nav_modes_valid:1;
-  unsigned cpr_odd_valid:1; // Last seen even CPR message
-  unsigned cpr_even_valid:1; // Last seen odd CPR message
   unsigned position_valid:1;
   unsigned alert_valid:1;
   unsigned spi_valid:1;

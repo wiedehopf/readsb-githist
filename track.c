@@ -1838,6 +1838,79 @@ save_state:
         if (a->trace_len % 4 == 0) {
             struct state_all *new_all = &(a->trace_all[a->trace_len/4]);
             *new_all = (struct state_all) { 0 };
+
+            for (int i = 0; i < 8; i++)
+                new_all->callsign[i] = a->callsign[i];
+
+            new_all->altitude_geom = (int16_t) (a->altitude_geom / 25);
+            new_all->baro_rate = (int16_t) (a->baro_rate / 32);
+            new_all->geom_rate = (int16_t) (a->geom_rate / 32);
+            new_all->ias = a->ias;
+            new_all->tas = a->tas;
+
+            new_all->squawk = a->squawk;
+            new_all->category =  a->category; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
+            new_all->nav_altitude_mcp = (int16_t) (a->nav_altitude_mcp / 32);
+            new_all->nav_altitude_fms = (int16_t) (a->nav_altitude_fms / 32);
+
+            new_all->nav_qnh = (int16_t) (a->nav_qnh * 10);
+            new_all->nav_heading = (int16_t) (a->nav_heading * 10);
+            new_all->gs = (int16_t) (a->gs * 10);
+            new_all->mach = (int16_t) (a->mach * 1000);
+            new_all->track = (int16_t) (10 * a->track);
+            new_all->track_rate = (int16_t) (100 * a->track_rate);
+            new_all->roll = (int16_t) (100 * a->roll);
+            new_all->mag_heading = (int16_t) (10 * a->mag_heading);
+            new_all->true_heading = (int16_t) (10 * a->true_heading);
+
+            new_all->emergency = a->emergency;
+            new_all->airground = a->airground;
+            new_all->addrtype = a->addrtype;
+            new_all->nav_modes = a->nav_modes;
+            new_all->nav_altitude_src = a->nav_altitude_src;
+            new_all->adsb_version = a->adsb_version;
+            new_all->adsr_version = a->adsr_version;
+            new_all->tisb_version = a->tisb_version;
+            new_all->sil_type = a->sil_type;
+
+
+#define F(f) do { new_all->f = (now < a->f.updated + 30000); } while (0)
+           F(callsign_valid);
+           F(altitude_baro_valid);
+           F(altitude_geom_valid);
+           F(geom_delta_valid);
+           F(gs_valid);
+           F(ias_valid);
+           F(tas_valid);
+           F(mach_valid);
+           F(track_valid);
+           F(track_rate_valid);
+           F(roll_valid);
+           F(mag_heading_valid);
+           F(true_heading_valid);
+           F(baro_rate_valid);
+           F(geom_rate_valid);
+           F(nic_a_valid);
+           F(nic_c_valid);
+           F(nic_baro_valid);
+           F(nac_p_valid);
+           F(nac_v_valid);
+           F(sil_valid);
+           F(gva_valid);
+           F(sda_valid);
+           F(squawk_valid);
+           F(emergency_valid);
+           F(airground_valid);
+           F(nav_qnh_valid);
+           F(nav_altitude_mcp_valid);
+           F(nav_altitude_fms_valid);
+           F(nav_altitude_src_valid);
+           F(nav_heading_valid);
+           F(nav_modes_valid);
+           F(position_valid);
+           F(alert_valid);
+           F(spi_valid);
+#undef F
         }
 
         // bookkeeping:
