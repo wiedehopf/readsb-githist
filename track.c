@@ -1786,6 +1786,10 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             goto save_state;
         }
 
+        if (trackDataValid(&a->gs_valid) && last->flags.gs_valid && fabs(last->gs / 10.0 - a->gs) > 8) {
+            goto save_state;
+        }
+
 no_save_state:
         save_state = 0;
 save_state:
@@ -1795,7 +1799,6 @@ save_state:
         new->lat = (int32_t) (new_lat * 1E6);
         new->lon = (int32_t) (new_lon * 1E6);
         new->timestamp = now;
-        new->gs = (int16_t) (10 * a->gs);
         new->altitude = (int16_t) (a->altitude_baro / 25);
 
         new->flags = (struct state_flags) { 0 };
@@ -1820,8 +1823,10 @@ save_state:
         if (trackDataAge(now, &a->altitude_baro_valid) < 5000 && a->altitude_baro_reliable >= ALTITUDE_BARO_RELIABLE_MAX / 4)
             new->flags.altitude_valid = 1;
 
-        if (trackDataValid(&a->gs_valid))
+        if (trackDataValid(&a->gs_valid)) {
             new->flags.gs_valid = 1;
+            new->gs = (int16_t) (10 * a->gs);
+        }
 
         if (trackDataAge(now, &a->geom_rate_valid) < 5000) {
             new->flags.rate_valid = 1;
@@ -1936,6 +1941,7 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
         a->trace_alloc = 0;
         a->trace = NULL;
         pthread_mutex_unlock(&a->trace_mutex);
+        a->trace_pos_discarded = 0;
         return;
     }
     if (a->trace_len == GLOBE_TRACE_SIZE)
