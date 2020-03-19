@@ -1726,6 +1726,10 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
 
         if (on_ground != was_ground) {
             // if the last position wasn't added to the trace, add it now.
+            if (on_ground)
+                fprintf(stderr, "Landing: %06X (%d).\n", a->addr, a->trace_len);
+            else
+                fprintf(stderr, "Takeoff: %06X (%d).\n", a->addr, a->trace_len);
             if (a->trace_pos_discarded) {
                 pthread_mutex_lock(&a->trace_mutex);
                 (a->trace_len)++;
@@ -1932,6 +1936,8 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
         pthread_mutex_unlock(&a->trace_mutex);
         return;
     }
+    if (a->trace_len == GLOBE_TRACE_SIZE)
+        fprintf(stderr, "Max trace length: %06X (%d).\n", a->addr, a->trace_len);
 
     if (a->trace_len == GLOBE_TRACE_SIZE - 2 || now > trace->timestamp + (24 * 3600 + GLOBE_OVERLAP * 2) * 1000) {
         int new_start = a->trace_len;
