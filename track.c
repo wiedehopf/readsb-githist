@@ -1790,6 +1790,8 @@ no_save_state:
         save_state = 0;
 save_state:
 
+        *new = (struct state) { 0 };
+
         new->lat = (int32_t) (new_lat * 1E6);
         new->lon = (int32_t) (new_lon * 1E6);
         new->timestamp = now;
