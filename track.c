@@ -1747,36 +1747,62 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
                 goto save_state;
         }
 
+        if (trackDataAge(now, &a->altitude_baro_valid) < 5000
+                && a->altitude_baro_reliable >= ALTITUDE_BARO_RELIABLE_MAX / 4
+                && last->flags.altitude_valid) {
 
-        if (a->altitude_baro > 8000 && abs((a->altitude_baro + 250)/500 - (last_alt + 250)/500) >= 1) {
-            goto save_state;
-        }
+            if (a->altitude_baro > 8000 && abs((a->altitude_baro + 250)/500 - (last_alt + 250)/500) >= 1) {
+                //fprintf(stderr, "1");
+                goto save_state;
+            }
 
-        {
-            int offset = 62;
-            int div = 125;
-            int alt_add = (a->altitude_baro >= 0) ? offset : (-1 * offset);
-            int last_alt_add = (last_alt >= 0) ? offset : (-1 * offset);
-            if (a->altitude_baro <= 8000
-                    && abs((a->altitude_baro + alt_add)/div - (last_alt + last_alt_add)/div) >= 1) {
+            {
+                int offset = 125;
+                int div = 250;
+                int alt_add = (a->altitude_baro >= 0) ? offset : (-1 * offset);
+                int last_alt_add = (last_alt >= 0) ? offset : (-1 * offset);
+                if (a->altitude_baro <= 8000 && a->altitude_baro > 4000
+                        && abs((a->altitude_baro + alt_add)/div - (last_alt + last_alt_add)/div) >= 1) {
+                    //fprintf(stderr, "2");
+                    goto save_state;
+                }
+            }
+
+            {
+                int offset = 62;
+                int div = 125;
+                int alt_add = (a->altitude_baro >= 0) ? offset : (-1 * offset);
+                int last_alt_add = (last_alt >= 0) ? offset : (-1 * offset);
+                if (a->altitude_baro <= 4000
+                        && abs((a->altitude_baro + alt_add)/div - (last_alt + last_alt_add)/div) >= 1) {
+                    //fprintf(stderr, "3");
+                    goto save_state;
+                }
+            }
+
+            if (abs(a->altitude_baro - last_alt) >= 100 && now > last->timestamp + ((1000 * 12000)  / abs(a->altitude_baro - last_alt))) {
+                //fprintf(stderr, "4");
+                //fprintf(stderr, "%06x %d %d\n", a->addr, abs(a->altitude_baro - last_alt), ((1000 * 12000)  / abs(a->altitude_baro - last_alt)));
                 goto save_state;
             }
         }
 
-        if (abs(a->altitude_baro - last_alt) >= 100 && now > last->timestamp + ((1000 * 12000)  / abs(a->altitude_baro - last_alt))) {
-            goto save_state;
-        }
-
-        if (track_diff > 0.5
-                && (now > last->timestamp + (uint64_t) (100.0 * 1000.0 / turn_density / track_diff))
-           ) {
-            goto save_state;
+        if (last->flags.track_valid && track_valid) {
+            if (track_diff > 0.5
+                    && (now > last->timestamp + (uint64_t) (100.0 * 1000.0 / turn_density / track_diff))
+               ) {
+                //fprintf(stderr, "t");
+                goto save_state;
+            }
         }
 
         if (trackDataValid(&a->gs_valid) && last->flags.gs_valid && fabs(last->gs / 10.0 - a->gs) > 8) {
+            //fprintf(stderr, "s\n");
+            //fprintf(stderr, "%06x %0.1f %0.1f\n", a->addr, fabs(last->gs / 10.0 - a->gs), a->gs);
             goto save_state;
         }
 
+        goto no_save_state;
 save_state:
 
         *new = (struct state) { 0 };
@@ -1839,78 +1865,7 @@ save_state:
             struct state_all *new_all = &(a->trace_all[a->trace_len/4]);
             *new_all = (struct state_all) { 0 };
 
-            for (int i = 0; i < 8; i++)
-                new_all->callsign[i] = a->callsign[i];
-
-            new_all->altitude_geom = (int16_t) (a->altitude_geom / 25);
-            new_all->baro_rate = (int16_t) (a->baro_rate / 32);
-            new_all->geom_rate = (int16_t) (a->geom_rate / 32);
-            new_all->ias = a->ias;
-            new_all->tas = a->tas;
-
-            new_all->squawk = a->squawk;
-            new_all->category =  a->category; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
-            new_all->nav_altitude_mcp = (int16_t) (a->nav_altitude_mcp / 32);
-            new_all->nav_altitude_fms = (int16_t) (a->nav_altitude_fms / 32);
-
-            new_all->nav_qnh = (int16_t) (a->nav_qnh * 10);
-            new_all->nav_heading = (int16_t) (a->nav_heading * 10);
-            new_all->gs = (int16_t) (a->gs * 10);
-            new_all->mach = (int16_t) (a->mach * 1000);
-            new_all->track = (int16_t) (10 * a->track);
-            new_all->track_rate = (int16_t) (100 * a->track_rate);
-            new_all->roll = (int16_t) (100 * a->roll);
-            new_all->mag_heading = (int16_t) (10 * a->mag_heading);
-            new_all->true_heading = (int16_t) (10 * a->true_heading);
-
-            new_all->emergency = a->emergency;
-            new_all->airground = a->airground;
-            new_all->addrtype = a->addrtype;
-            new_all->nav_modes = a->nav_modes;
-            new_all->nav_altitude_src = a->nav_altitude_src;
-            new_all->adsb_version = a->adsb_version;
-            new_all->adsr_version = a->adsr_version;
-            new_all->tisb_version = a->tisb_version;
-            new_all->sil_type = a->sil_type;
-
-
-#define F(f) do { new_all->f = (now < a->f.updated + 30000); } while (0)
-           F(callsign_valid);
-           F(altitude_baro_valid);
-           F(altitude_geom_valid);
-           F(geom_delta_valid);
-           F(gs_valid);
-           F(ias_valid);
-           F(tas_valid);
-           F(mach_valid);
-           F(track_valid);
-           F(track_rate_valid);
-           F(roll_valid);
-           F(mag_heading_valid);
-           F(true_heading_valid);
-           F(baro_rate_valid);
-           F(geom_rate_valid);
-           F(nic_a_valid);
-           F(nic_c_valid);
-           F(nic_baro_valid);
-           F(nac_p_valid);
-           F(nac_v_valid);
-           F(sil_valid);
-           F(gva_valid);
-           F(sda_valid);
-           F(squawk_valid);
-           F(emergency_valid);
-           F(airground_valid);
-           F(nav_qnh_valid);
-           F(nav_altitude_mcp_valid);
-           F(nav_altitude_fms_valid);
-           F(nav_altitude_src_valid);
-           F(nav_heading_valid);
-           F(nav_modes_valid);
-           F(position_valid);
-           F(alert_valid);
-           F(spi_valid);
-#undef F
+            to_state_all(a, new_all, now);
         }
 
         // bookkeeping:
@@ -2043,7 +1998,9 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
 
     if (a->trace_len == a->trace_alloc) {
         pthread_mutex_lock(&a->trace_mutex);
-        a->trace_alloc += GLOBE_STEP;
+        a->trace_alloc *= 2;
+        if (a->trace_alloc > GLOBE_TRACE_SIZE)
+            a->trace_alloc = GLOBE_TRACE_SIZE;
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
         a->trace_all = realloc(a->trace_all, a->trace_alloc / 4 * sizeof(struct state_all));
         pthread_mutex_unlock(&a->trace_mutex);
@@ -2055,11 +2012,86 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
             fprintf(stderr, "GLOBE_TRACE_SIZE EXCEEDED!: %06X (%d).\n", a->addr, a->trace_len);
     }
 
-    if (a->trace_len + 7 * GLOBE_STEP / 4 <= a->trace_alloc) {
+    if (a->trace_len < (a->trace_alloc - GLOBE_STEP) / 3 && a->trace_alloc >= 2 * GLOBE_STEP) {
         pthread_mutex_lock(&a->trace_mutex);
-        a->trace_alloc -= GLOBE_STEP;
+        a->trace_alloc /= 2;
         a->trace = realloc(a->trace, a->trace_alloc * sizeof(struct state));
         a->trace_all = realloc(a->trace_all, a->trace_alloc / 4 * sizeof(struct state_all));
         pthread_mutex_unlock(&a->trace_mutex);
     }
+}
+
+void to_state_all(struct aircraft *a, struct state_all *new, uint64_t now) {
+            for (int i = 0; i < 8; i++)
+                new->callsign[i] = a->callsign[i];
+
+            new->altitude_geom = (int16_t) (a->altitude_geom / 25);
+            new->baro_rate = (int16_t) (a->baro_rate / 32);
+            new->geom_rate = (int16_t) (a->geom_rate / 32);
+            new->ias = a->ias;
+            new->tas = a->tas;
+
+            new->squawk = a->squawk;
+            new->category =  a->category; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
+            new->nav_altitude_mcp = (int16_t) (a->nav_altitude_mcp / 32);
+            new->nav_altitude_fms = (int16_t) (a->nav_altitude_fms / 32);
+
+            new->nav_qnh = (int16_t) (a->nav_qnh * 10);
+            new->nav_heading = (int16_t) (a->nav_heading * 10);
+            new->gs = (int16_t) (a->gs * 10);
+            new->mach = (int16_t) (a->mach * 1000);
+            new->track = (int16_t) (10 * a->track);
+            new->track_rate = (int16_t) (100 * a->track_rate);
+            new->roll = (int16_t) (100 * a->roll);
+            new->mag_heading = (int16_t) (10 * a->mag_heading);
+            new->true_heading = (int16_t) (10 * a->true_heading);
+
+            new->emergency = a->emergency;
+            new->airground = a->airground;
+            new->addrtype = a->addrtype;
+            new->nav_modes = a->nav_modes;
+            new->nav_altitude_src = a->nav_altitude_src;
+            new->adsb_version = a->adsb_version;
+            new->adsr_version = a->adsr_version;
+            new->tisb_version = a->tisb_version;
+            new->sil_type = a->sil_type;
+
+
+#define F(f) do { new->f = (now < a->f.updated + 30000); } while (0)
+           F(callsign_valid);
+           F(altitude_baro_valid);
+           F(altitude_geom_valid);
+           F(geom_delta_valid);
+           F(gs_valid);
+           F(ias_valid);
+           F(tas_valid);
+           F(mach_valid);
+           F(track_valid);
+           F(track_rate_valid);
+           F(roll_valid);
+           F(mag_heading_valid);
+           F(true_heading_valid);
+           F(baro_rate_valid);
+           F(geom_rate_valid);
+           F(nic_a_valid);
+           F(nic_c_valid);
+           F(nic_baro_valid);
+           F(nac_p_valid);
+           F(nac_v_valid);
+           F(sil_valid);
+           F(gva_valid);
+           F(sda_valid);
+           F(squawk_valid);
+           F(emergency_valid);
+           F(airground_valid);
+           F(nav_qnh_valid);
+           F(nav_altitude_mcp_valid);
+           F(nav_altitude_fms_valid);
+           F(nav_altitude_src_valid);
+           F(nav_heading_valid);
+           F(nav_modes_valid);
+           F(position_valid);
+           F(alert_valid);
+           F(spi_valid);
+#undef F
 }

@@ -434,6 +434,7 @@ trackDataAge (uint64_t now, const data_validity *v)
 
 // calculate great circle distance in meters
 double greatcircle(double lat0, double lon0, double lat1, double lon1);
+void to_state_all(struct aircraft *a, struct state_all *new, uint64_t now);
 
 /* Update aircraft state from data in the provided mesage.
  * Return the tracked aircraft.
