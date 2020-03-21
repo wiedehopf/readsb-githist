@@ -420,47 +420,48 @@ void *load_state(void *arg) {
                 continue;
             }
 
-            int size_state = a->trace_len * sizeof(struct state);
-            int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
-
-            if (trace_size != size_state + size_all) {
-                fprintf(stderr, "trace_size mismatch\n");
-                free(a);
-                close(fd);
-                unlink(pathbuf);
-                continue;
-            }
-
-            a->first_message = NULL;
-
+            // read trace
             if (a->trace_alloc > 0) {
+
+                int size_state = a->trace_len * sizeof(struct state);
+                int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
+
+                if (trace_size != size_state + size_all) {
+                    fprintf(stderr, "trace_size mismatch\n");
+                    goto discard_trace;
+                }
+
                 a->trace = malloc(a->trace_alloc * sizeof(struct state));
                 a->trace_all = malloc(a->trace_alloc / 4 * sizeof(struct state_all));
+
                 if (read(fd, a->trace, size_state) != size_state
                         || read(fd, a->trace_all, size_all) != size_all) {
                     fprintf(stderr, "read trace fail\n");
                     free(a->trace);
                     free(a->trace_all);
-                    free(a);
-                    close(fd);
-                    unlink(pathbuf);
-                    continue;
+                    goto discard_trace;
                 }
+
                 a->trace_next_fw = now + 1000 * (rand() % 120); // spread over 2 mins
                 a->trace_full_write = 0xc0ffee; // rewrite full history file
                 //a->trace_write = 1;
                 //write_trace(a, now);
+
+
+                if (pthread_mutex_init(&a->trace_mutex, NULL)) {
+                    fprintf(stderr, "Unable to initialize trace mutex!\n");
+                    exit(1);
+                }
+
             }
 
-            if (pthread_mutex_init(&a->trace_mutex, NULL)) {
-                fprintf(stderr, "Unable to initialize trace mutex!\n");
-                exit(1);
-            }
+discard_trace:
 
             Modes.stats_current.unique_aircraft++;
 
             close(fd);
 
+            a->first_message = NULL;
             if (a->seen > now)
                 a->seen = 0;
 
