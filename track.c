@@ -1102,6 +1102,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         if (a->altitude_baro_reliable <= 0  || abs(delta) < 300
                 || (fpm < max_fpm && fpm > min_fpm)
                 || (good_crc && a->altitude_baro_reliable <= (ALTITUDE_BARO_RELIABLE_MAX/2 + 2))
+                || mm->source > a->altitude_baro_valid.source
            ) {
             if (accept_data(&a->altitude_baro_valid, mm->source, mm, 1)) {
                 a->altitude_baro_reliable = min(ALTITUDE_BARO_RELIABLE_MAX , a->altitude_baro_reliable + (good_crc+1));
