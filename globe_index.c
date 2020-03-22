@@ -543,6 +543,9 @@ static void mark_legs(struct aircraft *a) {
     int high = 0;
     int low = 100000;
 
+    int last_five[5] = { 0 };
+    uint32_t five_pos = 0;
+
     uint32_t focus = 0xfffffff;
 
     double sum = 0;
@@ -564,8 +567,20 @@ static void mark_legs(struct aircraft *a) {
         if (!altitude_valid)
             continue;
 
-        if (on_ground)
-            altitude = 0;
+        if (on_ground) {
+            int avg = 0;
+            for (int i = 0; i < 5; i++) avg += last_five[i];
+            avg /= 5;
+            altitude = avg;
+        } else {
+            if (five_pos == 0) {
+                for (int i = 0; i < 5; i++)
+                    last_five[i] = altitude;
+            } else {
+                last_five[five_pos % 5] = altitude;
+            }
+            five_pos++;
+        }
 
         sum += altitude;
     }
@@ -597,6 +612,10 @@ static void mark_legs(struct aircraft *a) {
     uint64_t last_airborne = 0;
     int was_ground = 0;
 
+    for (int i = 0; i < 5; i++)
+        last_five[i] = 0;
+    five_pos = 0;
+
     for (int i = 1; i < a->trace_len; i++) {
         struct state *state = &a->trace[i];
         struct state *prev = &a->trace[i-1];
@@ -616,8 +635,21 @@ static void mark_legs(struct aircraft *a) {
         if (!on_ground && !altitude_valid)
             continue;
 
-        if (on_ground)
-            altitude = 0;
+        if (on_ground) {
+            int avg = 0;
+            for (int i = 0; i < 5; i++)
+                avg += last_five[i];
+            avg /= 5;
+            altitude = avg;
+        } else {
+            if (five_pos == 0) {
+                for (int i = 0; i < 5; i++)
+                    last_five[i] = altitude;
+            } else {
+                last_five[five_pos % 5] = altitude;
+            }
+            five_pos++;
+        }
 
         if (!on_ground)
             last_airborne = state->timestamp;
