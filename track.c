@@ -1349,6 +1349,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         if (trackDataValid(&a->position_valid)
                 && mm->source <= a->position_valid.source
                 && !speed_check(a, mm->decoded_lat, mm->decoded_lon, (a->airground == AG_GROUND))
+                && mm->source != SOURCE_JAERO
                 && mm->source != SOURCE_PRIO
            )
         {
