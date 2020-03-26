@@ -1065,7 +1065,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
     
     if (mm->altitude_baro_valid &&
-            (mm->source > a->altitude_baro_valid.source ||
+            (mm->source >= a->altitude_baro_valid.source ||
              (trackDataAge(now, &a->baro_rate_valid) > 10 && a->altitude_baro_valid.source != SOURCE_JAERO)
             )
        ) {
@@ -1107,6 +1107,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
                 || (fpm < max_fpm && fpm > min_fpm)
                 || (good_crc && a->altitude_baro_reliable <= (ALTITUDE_BARO_RELIABLE_MAX/2 + 2))
                 || mm->source > a->altitude_baro_valid.source
+                || (mm->source == SOURCE_JAERO && a->altitude_baro_valid.source == SOURCE_JAERO)
            ) {
             if (accept_data(&a->altitude_baro_valid, mm->source, mm, 1)) {
                 a->altitude_baro_reliable = min(ALTITUDE_BARO_RELIABLE_MAX , a->altitude_baro_reliable + (good_crc+1));
