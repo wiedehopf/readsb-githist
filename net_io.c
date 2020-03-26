@@ -3044,7 +3044,7 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     if (trackDataValid(&a->mach_valid))
         p = safe_snprintf(p, end, ",\"mach\":%.3f", a->mach);
     if (trackDataValid(&a->track_valid))
-        p = safe_snprintf(p, end, ",\"track\":%.1f", a->track);
+        p = safe_snprintf(p, end, ",\"track\":%.2f", a->track);
     else if (a->calc_track != 0)
         p = safe_snprintf(p, end, ",\"calc_track\":%.1f", a->calc_track);
     if (trackDataValid(&a->track_rate_valid))
@@ -3052,9 +3052,9 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     if (trackDataValid(&a->roll_valid))
         p = safe_snprintf(p, end, ",\"roll\":%.1f", a->roll);
     if (trackDataValid(&a->mag_heading_valid))
-        p = safe_snprintf(p, end, ",\"mag_heading\":%.1f", a->mag_heading);
+        p = safe_snprintf(p, end, ",\"mag_heading\":%.2f", a->mag_heading);
     if (trackDataValid(&a->true_heading_valid))
-        p = safe_snprintf(p, end, ",\"true_heading\":%.1f", a->true_heading);
+        p = safe_snprintf(p, end, ",\"true_heading\":%.2f", a->true_heading);
     if (trackDataValid(&a->baro_rate_valid))
         p = safe_snprintf(p, end, ",\"baro_rate\":%d", a->baro_rate);
     if (trackDataValid(&a->geom_rate_valid))
