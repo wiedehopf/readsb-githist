@@ -81,7 +81,7 @@
 
 #define TRACK_STALE (15*1000)
 // 15 seconds
-#define TRACK_EXPIRE (70*1000)
+#define TRACK_EXPIRE (30*1000)
 // 70 seconds
 #define TRACK_EXPIRE_JAERO (33*60*1000)
 // 33 minutes
