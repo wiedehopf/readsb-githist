@@ -2065,9 +2065,12 @@ retry:
     return cb;
 }
 
-struct char_buffer generateTraceJson(struct aircraft *a, int start) {
+struct char_buffer generateTraceJson(struct aircraft *a, int start, int last) {
     struct char_buffer cb;
     int buflen = a->trace_len * 80 + 1024;
+
+    if (last < 0)
+        last = a->trace_len - 1;
 
     if (!Modes.json_globe_index) {
         cb.len = 0;
@@ -2084,7 +2087,7 @@ struct char_buffer generateTraceJson(struct aircraft *a, int start) {
 
         p = safe_snprintf(p, end, ",\n\"trace\":[ ");
 
-        for (int i = start; i < a->trace_len; i++) {
+        for (int i = start; i <= last; i++) {
             struct state *trace = &a->trace[i];
 
             int32_t altitude = trace->altitude * 25;

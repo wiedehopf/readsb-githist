@@ -211,13 +211,13 @@ void write_trace(struct aircraft *a, uint64_t now) {
     if (a->trace_len > 142 && a->trace_len - 142 > start24)
        start_recent = (a->trace_len - 142);
 
-    recent = generateTraceJson(a, start_recent);
+    recent = generateTraceJson(a, start_recent, -1);
     // write recent trace to /run
 
     if (a->trace_full_write > 103 || now > a->trace_next_fw) {
         // write full trace to /run
 
-        full = generateTraceJson(a, start24);
+        full = generateTraceJson(a, start24, -1);
 
         if (a->trace_full_write == 0xc0ffee) {
             a->trace_next_fw = now + 1000 * (rand() % (GLOBE_OVERLAP - 60 - GLOBE_OVERLAP / 16));
@@ -258,18 +258,25 @@ void write_trace(struct aircraft *a, uint64_t now) {
             utc->tm_sec = 0;
             utc->tm_min = 0;
             utc->tm_hour = 0;
-            uint64_t start_of_day = 1000 * (uint64_t) (timegm(utc) - 60);
+            uint64_t start_of_day = 1000 * (uint64_t) (timegm(utc));
+            uint64_t end_of_day = 1000 * (uint64_t) (timegm(utc) + 86400);
 
+            uint32_t focus = 0xfffffff;
 
             int start = -1;
+            int end = -1;
             for (int i = 0; i < a->trace_len; i++) {
-                if (a->trace[i].timestamp > start_of_day) {
+                if (start == -1 && a->trace[i].timestamp > start_of_day) {
                     start = i;
-                    break;
+                }
+                if (a->trace[i].timestamp < end_of_day) {
+                    end = i;
                 }
             }
-            if (start >= 0)
-                hist = generateTraceJson(a, start);
+            if (a->addr == focus)
+                fprintf(stderr, "%lu %lu %d %d\n", start_of_day/1000, end_of_day/1000, start, end);
+            if (start >= 0 && end >= 0)
+                hist = generateTraceJson(a, start, end);
         }
     }
 
