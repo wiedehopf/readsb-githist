@@ -2185,14 +2185,11 @@ static void calc_temp(struct aircraft *a, uint64_t now) {
 static inline int declination (struct aircraft *a, double *dec) {
     double year;
     time_t now_t = a->seen/1000;
-    static uint16_t count;
 
     struct tm utc;
     gmtime_r(&now_t, &utc);
 
     year = 1900.0 + utc.tm_year + utc.tm_yday / 365.0;
-    if (count++ == 50)
-        fprintf(stderr, "%.2f\n", year);
 
     double dip;
     double ti;

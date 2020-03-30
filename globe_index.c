@@ -254,12 +254,13 @@ void write_trace(struct aircraft *a, uint64_t now) {
                 Modes.globe_history_dir && !(a->addr & MODES_NON_ICAO_ADDRESS)) {
             // write to permanent storage
 
-            struct tm *utc = gmtime(&nowish);
-            utc->tm_sec = 0;
-            utc->tm_min = 0;
-            utc->tm_hour = 0;
-            uint64_t start_of_day = 1000 * (uint64_t) (timegm(utc));
-            uint64_t end_of_day = 1000 * (uint64_t) (timegm(utc) + 86400);
+            struct tm utc;
+            gmtime_r(&nowish, &utc);
+            utc.tm_sec = 0;
+            utc.tm_min = 0;
+            utc.tm_hour = 0;
+            uint64_t start_of_day = 1000 * (uint64_t) (timegm(&utc));
+            uint64_t end_of_day = 1000 * (uint64_t) (timegm(&utc) + 86400);
 
             uint32_t focus = 0xfffffff;
 
@@ -306,12 +307,13 @@ void write_trace(struct aircraft *a, uint64_t now) {
         static int day; // STATIC !!!!!!!!!!
 
         char tstring[100];
-        struct tm *utc = gmtime(&nowish);
-        strftime (tstring, 100, "%Y-%m-%d", utc);
+        struct tm utc;
+        gmtime_r(&nowish, &utc);
+        strftime (tstring, 100, "%Y-%m-%d", &utc);
 
-        if (utc->tm_mday != day) {
+        if (utc.tm_mday != day) {
 
-            day = utc->tm_mday;
+            day = utc.tm_mday;
 
             snprintf(filename, PATH_MAX - 200, "%s/%s", Modes.globe_history_dir, tstring);
             filename[PATH_MAX - 201] = 0;
@@ -688,9 +690,10 @@ static void mark_legs(struct aircraft *a) {
                 major_climb_index = bla;
                 if (a->addr == focus) {
                     time_t nowish = major_climb/1000;
-                    struct tm *utc = gmtime(&nowish);
+                    struct tm utc;
+                    gmtime_r(&nowish, &utc);
                     char tstring[100];
-                    strftime (tstring, 100, "%H:%M:%S", utc);
+                    strftime (tstring, 100, "%H:%M:%S", &utc);
                     fprintf(stderr, "climb: %d %s\n", altitude, tstring);
                 }
                 low = high - threshold * 9/10;
@@ -700,9 +703,10 @@ static void mark_legs(struct aircraft *a) {
                 major_descent_index = bla;
                 if (a->addr == focus) {
                     time_t nowish = major_descent/1000;
-                    struct tm *utc = gmtime(&nowish);
+                    struct tm utc;
+                    gmtime_r(&nowish, &utc);
                     char tstring[100];
-                    strftime (tstring, 100, "%H:%M:%S", utc);
+                    strftime (tstring, 100, "%H:%M:%S", &utc);
                     fprintf(stderr, "desc: %d %s\n", altitude, tstring);
                 }
                 high = low + threshold * 9/10;
@@ -786,9 +790,10 @@ static void mark_legs(struct aircraft *a) {
 
             if (a->addr == focus) {
                 time_t nowish = leg_ts/1000;
-                struct tm *utc = gmtime(&nowish);
+                struct tm utc;
+                gmtime_r(&nowish, &utc);
                 char tstring[100];
-                strftime (tstring, 100, "%H:%M:%S", utc);
+                strftime (tstring, 100, "%H:%M:%S", &utc);
                 fprintf(stderr, "leg: %s\n", tstring);
             }
         }
