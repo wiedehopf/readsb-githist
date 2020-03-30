@@ -268,10 +268,12 @@ struct aircraft
   int pos_set;
   float gs_last_pos; // Save a groundspeed associated with the last position
 
-  double padding3_01;
-  double padding3_02;
-  double padding3_03;
-  double padding3_04;
+  float wind_speed;
+  float wind_direction;
+  int wind_altitude;
+  float oat;
+  uint64_t wind_updated;
+  uint64_t oat_updated;
 
 
   // ----
@@ -477,4 +479,24 @@ max (int a, int b)
     return b;
 }
 
+static inline double
+norm_diff (double a, double pi)
+{
+    if (a < -pi)
+        a +=  2 * pi;
+    if (a > pi)
+        a -=  2 * pi;
+
+    return a;
+}
+static inline double
+norm_angle (double a, double pi)
+{
+    if (a < 0)
+        a +=  2 * pi;
+    if (a >= 2 * pi)
+        a -=  2 * pi;
+
+    return a;
+}
 #endif

@@ -3023,7 +3023,7 @@ static void *pthreadGetaddrinfo(void *param) {
 }
 
 static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now) {
-    p = safe_snprintf(p, end, "\n    {\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
+    p = safe_snprintf(p, end, "\n{\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
     if (a->addrtype != ADDR_ADSB_ICAO)
         p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
     if (trackDataValid(&a->callsign_valid)) {
@@ -3046,6 +3046,12 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
         p = safe_snprintf(p, end, ",\"tas\":%u", a->tas);
     if (trackDataValid(&a->mach_valid))
         p = safe_snprintf(p, end, ",\"mach\":%.3f", a->mach);
+    if (a->wind_updated + 30000 > now && abs(a->wind_altitude - a->altitude_baro) < 500) {
+        p = safe_snprintf(p, end, ",\"wd\":%.0f", a->wind_direction);
+        p = safe_snprintf(p, end, ",\"ws\":%.0f", a->wind_speed);
+    }
+    if (a->oat_updated + 30000 > now)
+        p = safe_snprintf(p, end, ",\"oat\":%.1f", a->oat);
     if (trackDataValid(&a->track_valid))
         p = safe_snprintf(p, end, ",\"track\":%.2f", a->track);
     else if (a->calc_track != 0)

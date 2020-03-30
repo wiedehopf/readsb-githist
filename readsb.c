@@ -54,6 +54,7 @@
 #define READSB
 #include "readsb.h"
 #include "help.h"
+#include "geomag.h"
 
 #include <stdarg.h>
 
@@ -220,6 +221,8 @@ static void modesInit(void) {
     for (int i = 0; i < TRACE_THREADS; i++) {
         pthread_mutex_init(&Modes.jsonTraceThreadMutex[i], NULL);
     }
+
+    geomag_init();
 
     Modes.sample_rate = (double)2400000.0;
 
@@ -670,6 +673,7 @@ static void backgroundTasks(void) {
 // Clean up memory prior to exit.
 static void cleanup_and_exit(int code) {
     // Free any used memory
+    geomag_destroy();
     interactiveCleanup();
     free(Modes.dev_name);
     free(Modes.filename);

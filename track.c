@@ -53,6 +53,7 @@
 
 #include "readsb.h"
 #include <inttypes.h>
+#include "geomag.h"
 
 /* #define DEBUG_CPR_CHECKS */
 
@@ -65,6 +66,9 @@ static void cleanupAircraft(struct aircraft *a);
 static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now);
 static void position_bad(struct aircraft *a);
 static void resize_trace(struct aircraft *a, uint64_t now);
+static void calc_wind(struct aircraft *a, uint64_t now);
+static void calc_temp(struct aircraft *a, uint64_t now);
+static inline int declination (struct aircraft *a, double *dec);
 
 //
 // Return a new aircraft structure for the linked list of tracked
@@ -284,6 +288,7 @@ static int speed_check(struct aircraft *a, double lat, double lon, int surface) 
     int speed;
     int inrange;
     uint64_t now = a->seen;
+    uint32_t focus = 0xc0ffeeba;
 
     if (!trackDataValid(&a->position_valid))
         return 1; // no reference, assume OK
@@ -326,12 +331,12 @@ static int speed_check(struct aircraft *a, double lat, double lon, int surface) 
     distance = greatcircle(a->lat, a->lon, lat, lon);
 
     inrange = (distance <= range);
-#ifdef DEBUG_CPR_CHECKS
-    if (!inrange) {
+//#ifdef DEBUG_CPR_CHECKS
+    if (a->addr == focus && !inrange) {
         fprintf(stderr, "Speed check failed: %06x: %.3f,%.3f -> %.3f,%.3f in %.1f seconds, max speed %d kt, range %.1fkm, actual %.1fkm\n",
                 a->addr, a->lat, a->lon, lat, lon, elapsed / 1000.0, speed, range / 1000.0, distance / 1000.0);
     }
-#endif
+//#endif
 
     return inrange;
 }
@@ -1183,8 +1188,20 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
 
         if (htype == HEADING_GROUND_TRACK && accept_data(&a->track_valid, mm->source, mm, 1)) {
             a->track = mm->heading;
-        } else if (htype == HEADING_MAGNETIC && accept_data(&a->mag_heading_valid, mm->source, mm, 1)) {
-            a->mag_heading = mm->heading;
+        } else if (htype == HEADING_MAGNETIC) {
+            double dec;
+            int err = declination(a, &dec);
+            if (accept_data(&a->mag_heading_valid, mm->source, mm, 1)) {
+                // don't accept more than 45 degree crab
+                if (
+                        (!trackDataValid(&a->track_valid) || fabs(norm_diff(mm->heading + dec - a->track, 180)) < 45)
+                        && !err && accept_data(&a->true_heading_valid, SOURCE_INDIRECT, mm, 1)
+                   ) {
+                    a->true_heading = norm_angle(mm->heading + dec, 180);
+                    calc_wind(a, now);
+                }
+                a->mag_heading = mm->heading;
+            }
         } else if (htype == HEADING_TRUE && accept_data(&a->true_heading_valid, mm->source, mm, 1)) {
             a->true_heading = mm->heading;
         }
@@ -1209,12 +1226,17 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         a->ias = mm->ias;
     }
 
-    if (mm->tas_valid && accept_data(&a->tas_valid, mm->source, mm, 0)) {
+    if (mm->tas_valid
+            && !(trackDataValid(&a->ias_valid) && mm->tas < a->ias)
+            && accept_data(&a->tas_valid, mm->source, mm, 0)) {
         a->tas = mm->tas;
+        calc_temp(a, now);
+        calc_wind(a, now);
     }
 
     if (mm->mach_valid && accept_data(&a->mach_valid, mm->source, mm, 0)) {
         a->mach = mm->mach;
+        calc_temp(a, now);
     }
 
     if (mm->baro_rate_valid && accept_data(&a->baro_rate_valid, mm->source, mm, 1)) {
@@ -2102,3 +2124,83 @@ void to_state_all(struct aircraft *a, struct state_all *new, uint64_t now) {
            F(spi_valid);
 #undef F
 }
+static void calc_wind(struct aircraft *a, uint64_t now) {
+    uint32_t focus = 0xc0ffeeba;
+
+    if (a->addr == focus)
+        fprintf(stderr, "%lu %lu %lu %lu\n", trackDataAge(now, &a->tas_valid), trackDataAge(now, &a->true_heading_valid),
+                trackDataAge(now, &a->gs_valid), trackDataAge(now, &a->track_valid));
+
+    if (!trackDataValid(&a->position_valid) || a->airground == AG_GROUND)
+        return;
+
+    if (trackDataAge(now, &a->tas_valid) > 5000
+            || trackDataAge(now, &a->gs_valid) > 5000
+            || trackDataAge(now, &a->track_valid) > 5000
+            || trackDataAge(now, &a->true_heading_valid) > 5000
+       ) {
+        return;
+    }
+
+    double trk = (M_PI / 180) * a->track;
+    double hdg = (M_PI / 180) * a->true_heading;
+    double tas = a->tas;
+    double gs = a->gs;
+    double crab = norm_diff(hdg - trk, M_PI);
+
+    double hw = tas - cos(crab) * gs;
+    double cw = sin(crab) * gs;
+    double ws = sqrt(hw * hw + cw * cw);
+    double wd = hdg + atan2(cw, hw);
+
+    wd = norm_angle(wd, M_PI);
+
+    wd *= (180 / M_PI);
+    crab *= (180 / M_PI);
+
+    //if (a->addr == focus)
+    //fprintf(stderr, "%06x: %.1f %.1f %.1f %.1f %.1f\n", a->addr, ws, wd, gs, tas, crab);
+    if (ws > 250) {
+        // Filter out wildly unrealistic wind speeds
+        return;
+    }
+    a->wind_speed = ws;
+    a->wind_direction = wd;
+    a->wind_updated = now;
+    a->wind_altitude = a->altitude_baro;
+}
+static void calc_temp(struct aircraft *a, uint64_t now) {
+    if (a->airground == AG_GROUND)
+        return;
+    if (trackDataAge(now, &a->tas_valid) > 5000 || trackDataAge(now, &a->mach_valid) > 5000)
+        return;
+
+    double fraction = a->tas / 661.47 / a->mach;
+    double temp = fraction * fraction * 288.15 - 273.15;
+
+    a->oat = temp;
+    a->oat_updated = now;
+}
+
+static inline int declination (struct aircraft *a, double *dec) {
+    double year;
+    time_t now_t = a->seen/1000;
+    static uint16_t count;
+
+    struct tm utc;
+    gmtime_r(&now_t, &utc);
+
+    year = 1900.0 + utc.tm_year + utc.tm_yday / 365.0;
+    if (count++ == 50)
+        fprintf(stderr, "%.2f\n", year);
+
+    double dip;
+    double ti;
+    double gv;
+
+    int res = geomag_calc(a->altitude_baro * 0.0003048, a->lat, a->lon, year, dec, &dip, &ti, &gv);
+    if (res)
+        *dec = 0.0;
+    return res;
+}
+
