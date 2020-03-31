@@ -491,21 +491,21 @@ void modesInitNet(void) {
     sbs_out = serviceInit("Basestation TCP output", &Modes.sbs_out, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
     serviceListen(sbs_out, Modes.net_bind_address, Modes.net_output_sbs_ports);
 
+    sbs_out_prio = serviceInit("Basestation TCP output PRIO", &Modes.sbs_out_prio, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
+    sbs_out_mlat = serviceInit("Basestation TCP output MLAT", &Modes.sbs_out_mlat, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
+    sbs_out_jaero = serviceInit("Basestation TCP output JAERO", &Modes.sbs_out_jaero, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
     if (strlen(Modes.net_output_sbs_ports) == 5) {
 
         char *mlat = strdup(Modes.net_output_sbs_ports);
         mlat[4] = '7';
-        sbs_out_mlat = serviceInit("Basestation TCP output MLAT", &Modes.sbs_out_mlat, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
         serviceListen(sbs_out_mlat, Modes.net_bind_address, mlat);
 
         char *prio = strdup(Modes.net_output_sbs_ports);
         prio[4] = '8';
-        sbs_out_prio = serviceInit("Basestation TCP output PRIO", &Modes.sbs_out_prio, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
         serviceListen(sbs_out_prio, Modes.net_bind_address, prio);
 
         char *jaero = strdup(Modes.net_output_sbs_ports);
         jaero[4] = '9';
-        sbs_out_jaero = serviceInit("Basestation TCP output JAERO", &Modes.sbs_out_jaero, send_sbs_heartbeat, READ_MODE_IGNORE, NULL, NULL);
         serviceListen(sbs_out_jaero, Modes.net_bind_address, jaero);
 
         free(mlat);
@@ -580,6 +580,12 @@ void modesInitNet(void) {
             con->service = sbs_in_jaero;
         else if (strcmp(con->protocol, "sbs_in_prio") == 0)
             con->service = sbs_in_prio;
+        else if (strcmp(con->protocol, "sbs_out_mlat") == 0)
+            con->service = sbs_out_mlat;
+        else if (strcmp(con->protocol, "sbs_out_jaero") == 0)
+            con->service = sbs_out_jaero;
+        else if (strcmp(con->protocol, "sbs_out_prio") == 0)
+            con->service = sbs_out_prio;
 
         pthread_mutex_lock(&con->mutex);
     }
