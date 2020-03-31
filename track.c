@@ -295,17 +295,21 @@ static int speed_check(struct aircraft *a, double lat, double lon, int surface) 
 
     elapsed = trackDataAge(now, &a->position_valid);
 
-    if (trackDataValid(&a->gs_valid)) {
-        // use the larger of the current and earlier speed
-        speed = (a->gs_last_pos > a->gs) ? a->gs_last_pos : a->gs;
-        // add 2 knots for every second we haven't known the speed
-        speed = speed + (2*trackDataAge(now, &a->gs_valid)/1000.0);
-    } else if (trackDataValid(&a->tas_valid)) {
-        speed = a->tas * 4 / 3;
-    } else if (trackDataValid(&a->ias_valid)) {
-        speed = a->ias * 2;
+    speed = surface ? 100 : 700; // guess
+
+    if (a->position_valid.source > SOURCE_MLAT) {
+        if (trackDataValid(&a->gs_valid)) {
+            // use the larger of the current and earlier speed
+            speed = (a->gs_last_pos > a->gs) ? a->gs_last_pos : a->gs;
+            // add 2 knots for every second we haven't known the speed
+            speed = speed + (2*trackDataAge(now, &a->gs_valid)/1000.0);
+        } else if (trackDataValid(&a->tas_valid)) {
+            speed = a->tas * 4 / 3;
+        } else if (trackDataValid(&a->ias_valid)) {
+            speed = a->ias * 2;
+        }
     } else {
-        speed = surface ? 100 : 700; // guess
+        speed = 900;
     }
 
     // Work out a reasonable speed to use:
@@ -1371,12 +1375,12 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     if (mm->sbs_in && mm->sbs_pos_valid) {
         if (trackDataValid(&a->position_valid)
                 && mm->source <= a->position_valid.source
-                && !speed_check(a, mm->decoded_lat, mm->decoded_lon, (a->airground == AG_GROUND))
                 && mm->source != SOURCE_JAERO
                 && mm->source != SOURCE_PRIO
+                && !speed_check(a, mm->decoded_lat, mm->decoded_lon, 0)
            )
         {
-            if (mm->source == a->position_valid.source) {
+            if (mm->source >= a->position_valid.source) {
                 position_bad(a);
             }
             // speed check failed, do nothing
