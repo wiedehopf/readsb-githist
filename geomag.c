@@ -467,6 +467,8 @@ static char geomag_introduction(double epochlowlim)
 {
     char help;
     static char ans;
+    int res = 0;
+    res++;
 
     printf("\n\n Welcome to the World Magnetic Model (WMM) %4.0lf C-Program\n\n", epochlowlim);
     printf("            --- Version 3.0, January 2010 ---\n\n");
@@ -474,7 +476,7 @@ static char geomag_introduction(double epochlowlim)
     printf("\n Earth's main magnetic field for a given point/area.");
     printf("\n Enter h for help and contact information or c to continue.");
     printf ("\n >");
-    scanf("%c%*[^\n]",&help);
+    res = scanf("%c%*[^\n]",&help);
     getchar();
 
     if ((help == 'h') || (help == 'H'))
@@ -531,7 +533,7 @@ static char geomag_introduction(double epochlowlim)
         printf("\n	Email:  Susan.McLean@noaa.gov or Stefan.Maus@noaa.gov ");
 
         printf("\n\n\n Continue with program? (y or n) ");
-        scanf("%c%*[^\n]", &ans);
+        res = scanf("%c%*[^\n]", &ans);
         getchar();
     }
     else
@@ -557,6 +559,8 @@ void geomag_interactive() {
     double rTd=0.017453292;
     double epochrange = 5.0;
     double dmin, imin, ddeg, ideg;
+    int res = 0;
+    res++;
 
     char ans = geomag_introduction(epochlowlim);
     if ((ans == 'y') || (ans == 'Y'))
@@ -573,23 +577,23 @@ S1:
     printf("\n\n\nENTER LATITUDE IN DECIMAL DEGREES ");
     printf("\n(North latitude positive, South latitude negative \n");
     printf("i.e. 25.5 for 25 degrees 30 minutes north.) \n");
-    scanf("%lf%*[^\n]", &dlat);
+    res = scanf("%lf%*[^\n]", &dlat);
     getchar();
 
     printf("ENTER LONGITUDE IN DECIMAL DEGREES");
     printf("(East longitude positive, West negative \n"); 
     printf("i.e.- 100.0 for 100.0 degrees west.)\n");
-    scanf("%lf%*[^\n]", &dlon);
+    res = scanf("%lf%*[^\n]", &dlon);
     getchar();
 
     printf("ENTER ALTITUDE IN KILOMETERS ABOVE WGS84 ELLIPSOID\n");
-    scanf("%lf%*[^\n]", &altm);
+    res = scanf("%lf%*[^\n]", &altm);
     getchar();
     alt = altm;
 
     epochuplim = epochlowlim + epochrange;
     printf("ENTER TIME IN DECIMAL YEAR (%-7.2lf - %-7.2lf)\n",epochlowlim,epochuplim);
-    scanf("%lf%*[^\n]",&time);
+    res = scanf("%lf%*[^\n]",&time);
     getchar();
 
     double dt = time - epoch;
@@ -612,7 +616,7 @@ S1:
         printf("\n TIME   = %.3lf",time);
         printf("\n Do you wish to continue? (y or n) ");
 
-        scanf("%c%*[^\n]",&answer);
+        res = scanf("%c%*[^\n]",&answer);
         getchar();
         if ((answer == 'n') || (answer == 'N'))
             goto MORE;
@@ -781,7 +785,7 @@ S1:
 MORE:
 
     printf("\n\nDO YOU NEED MORE POINT DATA? (y or n) ");
-    scanf("%c%*[^\n]", &answer);
+    res = scanf("%c%*[^\n]", &answer);
     getchar();
 
     if ((answer =='y')||(answer == 'Y')) goto S1;
