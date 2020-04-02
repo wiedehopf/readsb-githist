@@ -1378,7 +1378,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
 
     if (mm->sbs_in && mm->sbs_pos_valid) {
-        if (
+        if (mm->source != SOURCE_JAERO
+                && greatcircle(a->lat, a->lon, mm->decoded_lat, mm->decoded_lon) < 1) {
+        } else if (
                 mm->source != SOURCE_JAERO
                 && mm->source != SOURCE_PRIO
                 && !speed_check(a, mm->source, mm->decoded_lat, mm->decoded_lon, 0)
