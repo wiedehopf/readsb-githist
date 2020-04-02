@@ -414,7 +414,12 @@ static int doGlobalCPR(struct aircraft *a, struct modesMessage *mm, double *lat,
         return result;
 
     // check speed limit
-    if (trackDataValid(&a->position_valid) && mm->source <= a->position_valid.source && !speed_check(a, *lat, *lon, surface)) {
+    if (
+            (a->pos_reliable_odd > 0 || a->pos_reliable_even > 0)
+            && trackDataValid(&a->position_valid)
+            && mm->source <= a->position_valid.source
+            && !speed_check(a, *lat, *lon, surface)
+       ) {
         Modes.stats_current.cpr_global_speed_checks++;
         return -2;
     }
