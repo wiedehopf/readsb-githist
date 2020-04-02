@@ -262,8 +262,6 @@ void write_trace(struct aircraft *a, uint64_t now) {
             uint64_t start_of_day = 1000 * (uint64_t) (timegm(&utc));
             uint64_t end_of_day = 1000 * (uint64_t) (timegm(&utc) + 86400);
 
-            uint32_t focus = 0xfffffff;
-
             int start = -1;
             int end = -1;
             for (int i = 0; i < a->trace_len; i++) {
@@ -274,8 +272,6 @@ void write_trace(struct aircraft *a, uint64_t now) {
                     end = i;
                 }
             }
-            if (a->addr == focus)
-                fprintf(stderr, "%lu %lu %d %d\n", start_of_day/1000, end_of_day/1000, start, end);
             if (start >= 0 && end >= 0)
                 hist = generateTraceJson(a, start, end);
         }
@@ -726,18 +722,17 @@ static void mark_legs(struct aircraft *a) {
                 fprintf(stderr, "ground leg\n");
             leg_now = 1;
         }
+        double distance = greatcircle(
+                (double) a->trace[i].lat / 1E6,
+                (double) a->trace[i].lon / 1E6,
+                (double) a->trace[i-1].lat / 1E6,
+                (double) a->trace[i-1].lon / 1E6
+                );
 
-        if ( elapsed > 30 * 60 * 1000
-                && greatcircle(
-                    (double) a->trace[i].lat / 1E6,
-                    (double) a->trace[i].lon / 1E6,
-                    (double) a->trace[i-1].lat / 1E6,
-                    (double) a->trace[i-1].lon / 1E6
-                    ) < 10E3 * (double) elapsed / (30 * 60 * 1000)
-           ) {
+        if ( elapsed > 30 * 60 * 1000 && distance < 10E3 * (elapsed / (30 * 60 * 1000.0)) && distance > 1) {
             leg_now = 1;
             if (a->addr == focus)
-                fprintf(stderr, "elapsed leg\n");
+                fprintf(stderr, "leg, elapsed: %0.fmin, distance: %0.f\n", elapsed / (60 * 1000.0), distance / 1000.0);
         }
 
         int leg_float = 0;
