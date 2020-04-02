@@ -281,7 +281,7 @@ static void update_range_histogram(double lat, double lon) {
 // return true if it's OK for the aircraft to have travelled from its last known position
 // to a new position at (lat,lon,surface) at a time of now.
 
-static int speed_check(struct aircraft *a, double lat, double lon, int surface) {
+static int speed_check(struct aircraft *a, datasource_t source, double lat, double lon, int surface) {
     uint64_t elapsed;
     double distance;
     double range;
@@ -292,6 +292,8 @@ static int speed_check(struct aircraft *a, double lat, double lon, int surface) 
 
     if (!trackDataValid(&a->position_valid))
         return 1; // no reference, assume OK
+    if (source > a->position_valid.source)
+        return 1; // data is better quality, OVERRIDE
 
     elapsed = trackDataAge(now, &a->position_valid);
 
@@ -416,9 +418,7 @@ static int doGlobalCPR(struct aircraft *a, struct modesMessage *mm, double *lat,
     // check speed limit
     if (
             (a->pos_reliable_odd > 0 || a->pos_reliable_even > 0)
-            && trackDataValid(&a->position_valid)
-            && mm->source <= a->position_valid.source
-            && !speed_check(a, *lat, *lon, surface)
+            && !speed_check(a, mm->source, *lat, *lon, surface)
        ) {
         Modes.stats_current.cpr_global_speed_checks++;
         return -2;
@@ -512,7 +512,7 @@ static int doLocalCPR(struct aircraft *a, struct modesMessage *mm, double *lat, 
     }
 
     // check speed limit
-    if (trackDataValid(&a->position_valid) && mm->source <= a->position_valid.source && !speed_check(a, *lat, *lon, surface)) {
+    if (!speed_check(a, mm->source, *lat, *lon, surface)) {
 #ifdef DEBUG_CPR_CHECKS
         fprintf(stderr, "Speed check for %06X with local decoding failed\n", a->addr);
 #endif
@@ -1378,11 +1378,10 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
 
     if (mm->sbs_in && mm->sbs_pos_valid) {
-        if (trackDataValid(&a->position_valid)
-                && mm->source <= a->position_valid.source
-                && mm->source != SOURCE_JAERO
+        if (
+                mm->source != SOURCE_JAERO
                 && mm->source != SOURCE_PRIO
-                && !speed_check(a, mm->decoded_lat, mm->decoded_lon, 0)
+                && !speed_check(a, mm->source, mm->decoded_lat, mm->decoded_lon, 0)
            )
         {
             if (mm->source >= a->position_valid.source) {
