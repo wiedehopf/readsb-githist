@@ -203,6 +203,9 @@ static void modesInitConfig(void) {
     Modes.net_output_flush_size = 1200; // Default to 1200 Bytes
     Modes.net_output_flush_interval = 50; // Default to 50 ms
     Modes.basestation_is_mlat = 1;
+    Modes.cpr_focus = 0xc0ffeeba;
+
+    //Modes.cpr_focus = 0x3d68d2;
 
     sdrInitConfig();
 }
@@ -1016,6 +1019,8 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                     case 'p': Modes.debug |= MODES_DEBUG_NOPREAMBLE;
                         break;
                     case 'n': Modes.debug |= MODES_DEBUG_NET;
+                        break;
+                    case 'P': Modes.debug_cpr = 1;
                         break;
                     case 'j': Modes.debug |= MODES_DEBUG_JS;
                         break;

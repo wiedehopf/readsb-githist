@@ -55,15 +55,13 @@
 #include <inttypes.h>
 #include "geomag.h"
 
-/* #define DEBUG_CPR_CHECKS */
-
 uint32_t modeAC_count[4096];
 uint32_t modeAC_lastcount[4096];
 uint32_t modeAC_match[4096];
 uint32_t modeAC_age[4096];
 
 static void cleanupAircraft(struct aircraft *a);
-static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now);
+static void globe_stuff(struct aircraft *a, struct modesMessage *mm, double new_lat, double new_lon, uint64_t now);
 static void position_bad(struct aircraft *a);
 static void resize_trace(struct aircraft *a, uint64_t now);
 static void calc_wind(struct aircraft *a, uint64_t now);
@@ -288,7 +286,6 @@ static int speed_check(struct aircraft *a, datasource_t source, double lat, doub
     int speed;
     int inrange;
     uint64_t now = a->seen;
-    uint32_t focus = 0xc0ffeeba;
 
     if (!trackDataValid(&a->position_valid))
         return 1; // no reference, assume OK
@@ -337,12 +334,12 @@ static int speed_check(struct aircraft *a, datasource_t source, double lat, doub
     distance = greatcircle(a->lat, a->lon, lat, lon);
 
     inrange = (distance <= range);
-//#ifdef DEBUG_CPR_CHECKS
-    if (a->addr == focus && !inrange) {
+    if (a->addr == Modes.cpr_focus || Modes.debug_cpr) {
+      if (!inrange) {
         fprintf(stderr, "Speed check failed: %06x: %.3f,%.3f -> %.3f,%.3f in %.1f seconds, max speed %d kt, range %.1fkm, actual %.1fkm\n",
                 a->addr, a->lat, a->lon, lat, lon, elapsed / 1000.0, speed, range / 1000.0, distance / 1000.0);
+      }
     }
-//#endif
 
     return inrange;
 }
@@ -387,13 +384,13 @@ static int doGlobalCPR(struct aircraft *a, struct modesMessage *mm, double *lat,
     }
 
     if (result < 0) {
-#ifdef DEBUG_CPR_CHECKS
-        fprintf(stderr, "CPR: decode failure for %06X (%d).\n", a->addr, result);
-        fprintf(stderr, "  even: %d %d   odd: %d %d  fflag: %s\n",
-                a->cpr_even_lat, a->cpr_even_lon,
-                a->cpr_odd_lat, a->cpr_odd_lon,
-                fflag ? "odd" : "even");
-#endif
+        if (a->addr == Modes.cpr_focus || Modes.debug_cpr) {
+            fprintf(stderr, "CPR: decode failure for %06X (%d).\n", a->addr, result);
+            fprintf(stderr, "  even: %d %d   odd: %d %d  fflag: %s\n",
+                    a->cpr_even_lat, a->cpr_even_lon,
+                    a->cpr_odd_lat, a->cpr_odd_lon,
+                    fflag ? "odd" : "even");
+        }
         return result;
     }
 
@@ -401,10 +398,10 @@ static int doGlobalCPR(struct aircraft *a, struct modesMessage *mm, double *lat,
     if (Modes.maxRange > 0 && (Modes.bUserFlags & MODES_USER_LATLON_VALID)) {
         double range = greatcircle(Modes.fUserLat, Modes.fUserLon, *lat, *lon);
         if (range > Modes.maxRange) {
-#ifdef DEBUG_CPR_CHECKS
-            fprintf(stderr, "Global range check failed: %06x: %.3f,%.3f, max range %.1fkm, actual %.1fkm\n",
-                    a->addr, *lat, *lon, Modes.maxRange / 1000.0, range / 1000.0);
-#endif
+            if (a->addr == Modes.cpr_focus || Modes.debug_cpr) {
+                fprintf(stderr, "Global range check failed: %06x: %.3f,%.3f, max range %.1fkm, actual %.1fkm\n",
+                        a->addr, *lat, *lon, Modes.maxRange / 1000.0, range / 1000.0);
+            }
 
             Modes.stats_current.cpr_global_range_checks++;
             return (-2); // we consider an out-of-range value to be bad data
@@ -513,9 +510,9 @@ static int doLocalCPR(struct aircraft *a, struct modesMessage *mm, double *lat, 
 
     // check speed limit
     if (!speed_check(a, mm->source, *lat, *lon, surface)) {
-#ifdef DEBUG_CPR_CHECKS
-        fprintf(stderr, "Speed check for %06X with local decoding failed\n", a->addr);
-#endif
+        if (a->addr == Modes.cpr_focus || Modes.debug_cpr) {
+            fprintf(stderr, "Speed check for %06X with local decoding failed\n", a->addr);
+        }
         Modes.stats_current.cpr_local_speed_checks++;
         return -1;
     }
@@ -563,10 +560,13 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
 
         location_result = doGlobalCPR(a, mm, &new_lat, &new_lon, &new_nic, &new_rc);
 
+        if (a->addr == Modes.cpr_focus)
+            fprintf(stderr, "globalCPR: %d\n", location_result);
+
         if (location_result == -2) {
-#ifdef DEBUG_CPR_CHECKS
-            fprintf(stderr, "global CPR failure (invalid) for (%06X).\n", a->addr);
-#endif
+            if (a->addr == Modes.cpr_focus || Modes.debug_cpr) {
+                fprintf(stderr, "global CPR failure (invalid) for (%06X).\n", a->addr);
+            }
             // Global CPR failed because the position produced implausible results.
             // This is bad data.
             // At least one of the CPRs is bad, mark them both invalid.
@@ -576,11 +576,11 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
 
             return;
         } else if (location_result == -1) {
-#ifdef DEBUG_CPR_CHECKS
-            if (mm->source == SOURCE_MLAT) {
-                fprintf(stderr, "CPR skipped from MLAT (%06X).\n", a->addr);
+            if (a->addr == Modes.cpr_focus || Modes.debug_cpr) {
+                if (mm->source == SOURCE_MLAT) {
+                    fprintf(stderr, "CPR skipped from MLAT (%06X).\n", a->addr);
+                }
             }
-#endif
             // No local reference for surface position available, or the two messages crossed a zone.
             // Nonfatal, try again later.
             Modes.stats_current.cpr_global_skipped++;
@@ -613,6 +613,9 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
     if (location_result == -1) {
         location_result = doLocalCPR(a, mm, &new_lat, &new_lon, &new_nic, &new_rc);
 
+        if (a->addr == Modes.cpr_focus)
+            fprintf(stderr, "localCPR: %d\n", location_result);
+
         if (location_result >= 0 && accept_data(&a->position_valid, mm->source, mm, 1)) {
             Modes.stats_current.cpr_local_ok++;
             mm->cpr_relative = 1;
@@ -643,9 +646,7 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
         // update addrtype, we use the type from the accepted position.
         a->addrtype = mm->addrtype;
 
-        if (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2) {
-            globe_stuff(a, new_lat, new_lon, mm->sysTimestampMsg);
-        }
+        globe_stuff(a, mm, new_lat, new_lon, mm->sysTimestampMsg);
 
         // Update aircraft state
         a->lat = new_lat;
@@ -657,6 +658,7 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
             update_range_histogram(new_lat, new_lon);
         }
     }
+
 }
 
 static unsigned compute_nic(unsigned metype, unsigned version, unsigned nic_a, unsigned nic_b, unsigned nic_c) {
@@ -1397,11 +1399,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
             // update addrtype, we use the type from the accepted position.
             a->addrtype = mm->addrtype;
 
-            globe_stuff(a, mm->decoded_lat, mm->decoded_lon, now);
-
-            a->lat = mm->decoded_lat;
-            a->lon = mm->decoded_lon;
-
             if (a->position_valid.source == SOURCE_JAERO &&
                     a->pos_reliable_odd < 2 &&
                     a->pos_reliable_even < 2) {
@@ -1412,6 +1409,11 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
                 a->pos_reliable_odd = min(a->pos_reliable_odd + 1, persist);
                 a->pos_reliable_even = min(a->pos_reliable_even + 1, persist);
             }
+
+            globe_stuff(a, mm, mm->decoded_lat, mm->decoded_lon, now);
+
+            a->lat = mm->decoded_lat;
+            a->lon = mm->decoded_lon;
 
             if (a->messages < 2)
                 a->messages = 2;
@@ -1705,9 +1707,10 @@ static void cleanupAircraft(struct aircraft *a) {
     }
 }
 
-static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint64_t now) {
+static void globe_stuff(struct aircraft *a, struct modesMessage *mm, double new_lat, double new_lon, uint64_t now) {
 
-    //fprintf(stderr, "globe: (%.2f, %.2f)\n", new_lat, new_lon);
+    if (a->pos_reliable_odd < 2 || a->pos_reliable_even < 2)
+        return;
 
     if (trackDataAge(now, &a->track_valid) >= 10000 && a->pos_set) {
         double distance = greatcircle(a->lat, a->lon, new_lat, new_lon);
@@ -1715,6 +1718,48 @@ static void globe_stuff(struct aircraft *a, double new_lat, double new_lon, uint
             a->calc_track = bearing(a->lat, a->lon, new_lat, new_lon);
     } else {
         a->calc_track = 0;
+    }
+
+    if (a->addr == Modes.cpr_focus) {
+        if (mm->sbs_in) {
+            fprintf(stderr, "SBS: ");
+            if (mm->source == SOURCE_JAERO)
+                fprintf(stderr, "JAERO, ");
+            if (mm->source == SOURCE_MLAT)
+                fprintf(stderr, "MLAT, ");
+        } else {
+            fprintf(stderr, "%s%s",
+                    (mm->cpr_type == CPR_SURFACE) ? "surf, " : "air,  ",
+                    mm->cpr_odd ? "odd,  " : "even, ");
+        }
+
+        if (mm->sbs_in) {
+            fprintf(stderr,
+                    "lat: %.6f,"
+                    "lon: %.6f",
+                    mm->decoded_lat,
+                    mm->decoded_lon);
+        } else if (mm->cpr_decoded) {
+            fprintf(stderr,"lat: %.6f (%u),"
+                    " lon: %.6f (%u),"
+                    " relative: %d,"
+                    " NIC: %u,"
+                    " Rc: %.3f km",
+                    mm->decoded_lat,
+                    mm->cpr_lat,
+                    mm->decoded_lon,
+                    mm->cpr_lon,
+                    mm->cpr_relative,
+                    mm->decoded_nic,
+                    mm->decoded_rc / 1000.0);
+        } else {
+            fprintf(stderr,"lat: (%u),"
+                    " lon: (%u),"
+                    " CPR decoding: none",
+                    mm->cpr_lat,
+                    mm->cpr_lon);
+        }
+        fprintf(stderr, "\n");
     }
 
     a->pos_set = 1;

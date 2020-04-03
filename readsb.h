@@ -386,6 +386,8 @@ struct
   int mode_ac; // Enable decoding of SSR Modes A & C
   int mode_ac_auto; // allow toggling of A/C by Beast commands
   int debug; // Debugging mode
+  int debug_cpr;
+  uint32_t cpr_focus;
   int net; // Enable networking
   int net_only; // Enable just networking
   int net_output_flush_size; // Minimum Size of output data
