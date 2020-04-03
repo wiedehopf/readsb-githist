@@ -425,6 +425,9 @@ void *load_state(void *arg) {
                 continue;
             }
 
+            a->trace = NULL;
+            a->trace_all = NULL;
+
             if (!Modes.json_globe_index) {
                 a->trace_alloc = 0;
                 a->trace_len = 0;
