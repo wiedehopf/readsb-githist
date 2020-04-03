@@ -188,6 +188,7 @@ struct client *createGenericClient(struct net_service *service, int fd) {
     c->sendq_max = 0;
     c->sendq = NULL;
     c->con = NULL;
+    c->last_read = now;
 
     if (service->writer) {
         if (!(c->sendq = malloc(MODES_NET_SNDBUF_SIZE << Modes.net_sndbuf_size))) {
@@ -2474,6 +2475,7 @@ static void modesReadFromClient(struct client *c) {
     int left;
     int nread;
     int bContinue = 1;
+    uint64_t now = mstime();
 
     while (bContinue) {
         left = MODES_CLIENT_BUF_SIZE - c->buflen - 1; // leave 1 extra byte for NUL termination in the ASCII case
@@ -2538,6 +2540,9 @@ static void modesReadFromClient(struct client *c) {
             /* Message from a local connected Modes-S beast or GNS5894 are passed off the internet */
             remote = 0;
         }
+
+        if (nread > 0)
+            c->last_read = now;
 
         switch (c->service->read_mode) {
             case READ_MODE_IGNORE:
@@ -2714,12 +2719,18 @@ void modesNetPeriodicWork(void) {
             continue;
         if (c->service->read_handler) {
             modesReadFromClient(c);
-	} else if ((c->last_read + 30000) <= now) {
-	    // This is called if there is no read handler - we just read and discard to try to trigger socket errors
-	    // (if 30 sec have passed)
-	    periodicReadFromClient(c);
-	    c->last_read = now;
-	}
+            if (c->service->read_mode != READ_MODE_IGNORE
+                    && c->service->read_mode != READ_MODE_BEAST_COMMAND
+                    && c->last_read + 90000 <= now) {
+                fprintf(stderr, "%s: No data received for 90 seconds, reconnecting: %s port %s\n", c->service->descr, c->host, c->port);
+                modesCloseClient(c);
+            }
+        } else if ((c->last_read + 30000) <= now) {
+            // This is called if there is no read handler - we just read and discard to try to trigger socket errors
+            // (if 30 sec have passed)
+            periodicReadFromClient(c);
+            c->last_read = now;
+        }
 
         // Only if there is a sendq do we check to see if we need to flush it.
         // 5ms XXX magic number XXX
