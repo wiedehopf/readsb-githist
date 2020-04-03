@@ -1082,7 +1082,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     
     if (mm->altitude_baro_valid &&
             (mm->source >= a->altitude_baro_valid.source ||
-             (trackDataAge(now, &a->baro_rate_valid) > 10 && a->altitude_baro_valid.source != SOURCE_JAERO)
+             (trackDataAge(now, &a->baro_rate_valid) > 10
+              && a->altitude_baro_valid.source != SOURCE_JAERO
+              && a->altitude_baro_valid.source != SOURCE_SBS)
             )
        ) {
         int alt = altitude_to_feet(mm->altitude_baro, mm->altitude_baro_unit);
@@ -1120,7 +1122,7 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         int good_crc = (mm->crc == 0 && mm->source >= SOURCE_JAERO) ? (ALTITUDE_BARO_RELIABLE_MAX/2 - 1) : 0;
 
         if (mm->source == SOURCE_SBS || mm->source == SOURCE_MLAT)
-            good_crc = 1;
+            good_crc = 3;
 
         if (a->altitude_baro_reliable <= 0  || abs(delta) < 300
                 || (fpm < max_fpm && fpm > min_fpm)
