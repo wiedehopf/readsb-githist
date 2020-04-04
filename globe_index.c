@@ -411,10 +411,11 @@ void *load_state(void *arg) {
             int trace_size = len - sizeof(struct aircraft);
             struct aircraft *a = (struct aircraft *) aligned_alloc(64, sizeof(struct aircraft));
 
-            if (read(fd, a, sizeof(struct aircraft)) != sizeof(struct aircraft) ||
+            int res = read(fd, a, sizeof(struct aircraft));
+            if (res != sizeof(struct aircraft) ||
                     a->size_struct_aircraft != sizeof(struct aircraft)
                ) {
-                if (a->size_struct_aircraft != sizeof(struct aircraft)) {
+                if (res == sizeof(struct aircraft)) {
                     fprintf(stderr, "sizeof(struct aircraft) has changed, unable to read state!\n");
                 } else {
                     fprintf(stderr, "read fail\n");
@@ -740,7 +741,7 @@ static void mark_legs(struct aircraft *a) {
 
         int leg_float = 0;
         if (major_climb && major_descent && major_climb > major_descent + 12 * 60 * 1000) {
-            for (int i = major_descent_index; i < major_climb_index; i++) {
+            for (int i = major_descent_index; i < major_climb_index && i < a->trace_len - 1; i++) {
                 if (a->trace[i+1].timestamp > a->trace[i].timestamp + 6 * 60 * 1000)
                 leg_float = 1;
                 if (a->addr == focus)
