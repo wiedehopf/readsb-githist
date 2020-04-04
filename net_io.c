@@ -2512,6 +2512,16 @@ static void modesReadFromClient(struct client *c) {
             modesCloseClient(c);
             return;
         }
+        // check for idle connection, this server version requires data
+        // or a heartbeat, otherwise it will force a reconnect
+        if (c->last_read + 90000 <= now
+                && c->service->read_mode != READ_MODE_IGNORE
+                && c->service->read_mode != READ_MODE_BEAST_COMMAND
+           ) {
+            fprintf(stderr, "%s: No data received for 90 seconds, reconnecting: %s port %s\n", c->service->descr, c->host, c->port);
+            modesCloseClient(c);
+            return;
+        }
 
 #ifndef _WIN32
         if (nread < 0 && (err == EAGAIN || err == EWOULDBLOCK)) // No data available (not really an error)
@@ -2719,12 +2729,6 @@ void modesNetPeriodicWork(void) {
             continue;
         if (c->service->read_handler) {
             modesReadFromClient(c);
-            if (c->service->read_mode != READ_MODE_IGNORE
-                    && c->service->read_mode != READ_MODE_BEAST_COMMAND
-                    && c->last_read + 90000 <= now) {
-                fprintf(stderr, "%s: No data received for 90 seconds, reconnecting: %s port %s\n", c->service->descr, c->host, c->port);
-                modesCloseClient(c);
-            }
         } else if ((c->last_read + 30000) <= now) {
             // This is called if there is no read handler - we just read and discard to try to trigger socket errors
             // (if 30 sec have passed)
