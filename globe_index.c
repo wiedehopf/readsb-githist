@@ -473,12 +473,6 @@ void *load_state(void *arg) {
                 //a->trace_write = 1;
                 //write_trace(a, now);
 
-
-                if (pthread_mutex_init(&a->trace_mutex, NULL)) {
-                    fprintf(stderr, "Unable to initialize trace mutex!\n");
-                    exit(1);
-                }
-
             }
 
             goto keep_trace;
@@ -493,6 +487,11 @@ keep_trace:
             Modes.stats_current.unique_aircraft++;
 
             close(fd);
+
+            if (pthread_mutex_init(&a->trace_mutex, NULL)) {
+                fprintf(stderr, "Unable to initialize trace mutex!\n");
+                exit(1);
+            }
 
             a->first_message = NULL;
             if (a->seen > now)

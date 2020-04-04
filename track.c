@@ -101,11 +101,12 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
     memcpy(a->first_message, mm, sizeof(struct modesMessage));
 
     if (Modes.json_globe_index) {
-        if (pthread_mutex_init(&a->trace_mutex, NULL)) {
-            fprintf(stderr, "Unable to initialize trace mutex!\n");
-            exit(1);
-        }
         a->globe_index = -5;
+    }
+
+    if (pthread_mutex_init(&a->trace_mutex, NULL)) {
+        fprintf(stderr, "Unable to initialize trace mutex!\n");
+        exit(1);
     }
 
     // initialize data validity ages
