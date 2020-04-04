@@ -697,7 +697,7 @@ static void mark_legs(struct aircraft *a) {
 
         if (high - low > threshold) {
             if (last_high > last_low) {
-                int bla = last_low_index + 3;
+                int bla = min(a->trace_len - 1, last_low_index + 3);
                 major_climb = a->trace[bla].timestamp;
                 major_climb_index = bla;
                 if (a->addr == focus) {
@@ -748,11 +748,12 @@ static void mark_legs(struct aircraft *a) {
 
         int leg_float = 0;
         if (major_climb && major_descent && major_climb > major_descent + 12 * 60 * 1000) {
-            for (int i = major_descent_index; i < major_climb_index && i < a->trace_len - 1; i++) {
-                if (a->trace[i+1].timestamp > a->trace[i].timestamp + 6 * 60 * 1000)
-                leg_float = 1;
-                if (a->addr == focus)
-                    fprintf(stderr, "float leg\n");
+            for (int i = major_descent_index + 1; i < major_climb_index; i++) {
+                if (a->trace[i].timestamp > a->trace[i - 1].timestamp + 6 * 60 * 1000) {
+                    leg_float = 1;
+                    if (a->addr == focus)
+                        fprintf(stderr, "float leg\n");
+                }
             }
         }
 
