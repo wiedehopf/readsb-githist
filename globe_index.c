@@ -2,6 +2,15 @@
 
 static void mark_legs(struct aircraft *a);
 
+static ssize_t check_write(int fd, const void *buf, size_t count, const char *error_context) {
+    ssize_t res = write(fd, buf, count);
+    if (res < 0)
+        perror(error_context);
+    else if (res != (ssize_t) count)
+        fprintf(stderr, "%s: Only %ld of %ld bytes written!\n", error_context, res, count);
+    return res;
+}
+
 void init_globe_index(struct tile *s_tiles) {
     int count = 0;
 
@@ -337,11 +346,12 @@ void write_trace(struct aircraft *a, uint64_t now) {
         snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
 
         int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        int res;
-        res = write(fd, shadow, shadow_size);
-        if (res < 0)
+        if (fd < 0) {
             perror(filename);
-        close(fd);
+        } else {
+            check_write(fd, shadow, shadow_size, filename);
+            close(fd);
+        }
     }
     free(shadow);
 }
@@ -363,18 +373,20 @@ void *save_state(void *arg) {
             snprintf(filename, 1024, "%s/internal_state/%02x/%06x", Modes.globe_history_dir, a->addr % 256, a->addr);
 
             int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            int res;
-            res = write(fd, a, sizeof(struct aircraft));
-            if (a->trace_len > 0) {
-                int size_state = a->trace_len * sizeof(struct state);
-                int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
-                res = write(fd, a->trace, size_state);
-                res = write(fd, a->trace_all, size_all);
-            }
-            if (res < 0)
+            if (fd < 0) {
                 perror(filename);
+            } else {
+                int res;
+                res = check_write(fd, a, sizeof(struct aircraft), filename);
+                if (res > 0 && a->trace_len > 0) {
+                    int size_state = a->trace_len * sizeof(struct state);
+                    int size_all = (a->trace_len + 3) / 4 * sizeof(struct state_all);
+                    check_write(fd, a->trace, size_state, filename);
+                    check_write(fd, a->trace_all, size_all, filename);
+                }
 
-            close(fd);
+                close(fd);
+            }
         }
     }
     return NULL;
