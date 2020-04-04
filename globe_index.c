@@ -610,6 +610,7 @@ static void mark_legs(struct aircraft *a) {
 
     if (a->addr == focus) {
         fprintf(stderr, "threshold: %d\n", threshold);
+        fprintf(stderr, "trace_len: %d\n", a->trace_len);
     }
 
 
@@ -767,7 +768,7 @@ static void mark_legs(struct aircraft *a) {
             } else if (major_descent_index + 1 == major_climb_index) {
                 new_leg = &a->trace[major_climb_index];
             } else {
-                for (int i = major_climb_index; i >= major_descent_index; i--) {
+                for (int i = major_climb_index; i > major_descent_index; i--) {
                     struct state *state = &a->trace[i];
                     struct state *last = &a->trace[i - 1];
 
