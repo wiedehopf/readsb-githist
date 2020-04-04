@@ -469,7 +469,14 @@ void *load_state(void *arg) {
 
             }
 
+            goto keep_trace;
+
 discard_trace:
+                    a->trace = NULL;
+                    a->trace_all = NULL;
+                    a->trace_alloc = 0;
+                    a->trace_len = 0;
+keep_trace:
 
             Modes.stats_current.unique_aircraft++;
 
