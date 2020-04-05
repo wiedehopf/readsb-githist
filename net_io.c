@@ -3108,7 +3108,8 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
         p = append_nav_modes(p, end, a->nav_modes, "\"", ",");
         p = safe_snprintf(p, end, "]");
     }
-    if (trackDataValid(&a->position_valid) && (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2))
+    if (trackDataValid(&a->position_valid)
+            && ( (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2) || a->position_valid.source <= SOURCE_JAERO ) )
         p = safe_snprintf(p, end, ",\"lat\":%f,\"lon\":%f,\"nic\":%u,\"rc\":%u,\"seen_pos\":%.1f",
                 a->lat, a->lon, a->pos_nic, a->pos_rc,
                 (now < a->position_valid.updated) ? 0 : ((now - a->position_valid.updated) / 1000.0));

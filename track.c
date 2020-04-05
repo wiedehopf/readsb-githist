@@ -309,7 +309,7 @@ static int speed_check(struct aircraft *a, datasource_t source, double lat, doub
             speed = a->ias * 2;
         }
     } else {
-        speed = 900;
+        speed = 1100;
     }
 
     // Work out a reasonable speed to use:
@@ -589,7 +589,7 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
             if (accept_data(&a->position_valid, mm->source, mm, 1)) {
                 Modes.stats_current.cpr_global_ok++;
 
-                int persist = Modes.filter_persistence * (1 + (mm->source == SOURCE_MLAT));
+                int persist = Modes.filter_persistence;
 
                 if (a->pos_reliable_odd <= 0 || a->pos_reliable_even <=0) {
                     a->pos_reliable_odd = 1;
@@ -1402,16 +1402,9 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
             // update addrtype, we use the type from the accepted position.
             a->addrtype = mm->addrtype;
 
-            if (a->position_valid.source == SOURCE_JAERO &&
-                    a->pos_reliable_odd < 2 &&
-                    a->pos_reliable_even < 2) {
-                a->pos_reliable_odd = 2;
-                a->pos_reliable_even = 2;
-            } else {
-                int persist = Modes.filter_persistence * (1 + (mm->source == SOURCE_MLAT));
-                a->pos_reliable_odd = min(a->pos_reliable_odd + 1, persist);
-                a->pos_reliable_even = min(a->pos_reliable_even + 1, persist);
-            }
+            int persist = Modes.filter_persistence;
+            a->pos_reliable_odd = min(a->pos_reliable_odd + 1, persist);
+            a->pos_reliable_even = min(a->pos_reliable_even + 1, persist);
 
             globe_stuff(a, mm, mm->decoded_lat, mm->decoded_lon, now);
 
