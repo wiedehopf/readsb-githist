@@ -1122,8 +1122,8 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         }
         int good_crc = (mm->crc == 0 && mm->source >= SOURCE_JAERO) ? (ALTITUDE_BARO_RELIABLE_MAX/2 - 1) : 0;
 
-        if (mm->source == SOURCE_SBS || mm->source == SOURCE_MLAT)
-            good_crc = 3;
+        if (mm->source == SOURCE_SBS || mm->source == SOURCE_MLAT || mm->source ==SOURCE_JAERO)
+            good_crc = ALTITUDE_BARO_RELIABLE_MAX/2 - 1;
 
         if (a->altitude_baro_reliable <= 0  || abs(delta) < 300
                 || (fpm < max_fpm && fpm > min_fpm)
