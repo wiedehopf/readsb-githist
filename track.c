@@ -1386,8 +1386,15 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
 
     if (mm->sbs_in && mm->sbs_pos_valid) {
-        if (mm->source != SOURCE_JAERO
-                && greatcircle(a->lat, a->lon, mm->decoded_lat, mm->decoded_lon) < 1) {
+        int old_jaero = 0;
+        if (mm->source == SOURCE_JAERO && a->trace_len > 0) {
+            for (int i = a->trace_len - 1; i >= a->trace_len - 10 && i >= 0; i--)
+                if ( (int32_t) (mm->decoded_lat * 1E6) == a->trace[i].lat
+                        && (int32_t) (mm->decoded_lon * 1E6) == a->trace[i].lon )
+                    old_jaero = 1;
+        }
+        // avoid using already received positions
+        if (old_jaero || greatcircle(a->lat, a->lon, mm->decoded_lat, mm->decoded_lon) < 1) {
         } else if (
                 mm->source != SOURCE_JAERO
                 && mm->source != SOURCE_PRIO
@@ -1776,6 +1783,11 @@ static void globe_stuff(struct aircraft *a, struct modesMessage *mm, double new_
             a->trace_full_write = 9999; // rewrite full history file
 
             pthread_mutex_unlock(&a->trace_mutex);
+        } else if (a->trace_len > 5) {
+            for (int i = a->trace_len - 1; i >= a->trace_len - 5; i--)
+                if ( (int32_t) (new_lat * 1E6) == a->trace[i].lat
+                        && (int32_t) (new_lon * 1E6) == a->trace[i].lon )
+                    return;
         }
 
         struct state *trace = a->trace;
