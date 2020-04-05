@@ -1914,7 +1914,8 @@ save_state:
         if (on_ground)
             new->flags.on_ground = 1;
 
-        if (trackDataAge(now, &a->altitude_baro_valid) < 5000 && a->altitude_baro_reliable >= ALTITUDE_BARO_RELIABLE_MAX / 4)
+        if ((trackDataAge(now, &a->altitude_baro_valid) < 15000 && a->altitude_baro_reliable >= 3)
+                || (a->position_valid.source <= SOURCE_JAERO && trackDataValid(&a->altitude_baro_valid)) )
             new->flags.altitude_valid = 1;
 
         if (trackDataValid(&a->gs_valid)) {
