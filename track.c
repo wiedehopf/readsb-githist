@@ -1705,7 +1705,8 @@ static void cleanupAircraft(struct aircraft *a) {
 
 static void globe_stuff(struct aircraft *a, struct modesMessage *mm, double new_lat, double new_lon, uint64_t now) {
 
-    if (a->pos_reliable_odd < 2 || a->pos_reliable_even < 2)
+    if ((a->pos_reliable_odd < 2 || a->pos_reliable_even < 2)
+            && (mm->source > SOURCE_JAERO || now < a->seen_pos + 60 * 1000))
         return;
 
     if (trackDataAge(now, &a->track_valid) >= 10000 && a->pos_set) {
