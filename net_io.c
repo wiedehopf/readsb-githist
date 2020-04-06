@@ -2518,7 +2518,7 @@ static void modesReadFromClient(struct client *c) {
         }
         // check for idle connection, this server version requires data
         // or a heartbeat, otherwise it will force a reconnect
-        if (c->last_read + 90000 <= now
+        if (c->con && c->last_read + 90000 <= now
                 && c->service->read_mode != READ_MODE_IGNORE
                 && c->service->read_mode != READ_MODE_BEAST_COMMAND
            ) {

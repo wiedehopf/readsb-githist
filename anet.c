@@ -127,8 +127,8 @@ int anetTcpKeepAlive(char *err, int fd)
 {
     int yes = 1;
 
-    int idle = 15;
-    int interval = 5;
+    int idle = 20;
+    int interval = 2;
     int count = 3;
 
     if (
