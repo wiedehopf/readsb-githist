@@ -55,7 +55,7 @@
 #define DUMP1090_TRACK_H
 
 /* Maximum age of tracked aircraft in milliseconds */
-#define TRACK_AIRCRAFT_TTL (30*24*60*60000L)
+#define TRACK_AIRCRAFT_TTL (30*24*60*60000ULL)
 // 30 days should cover almost all turn-arounds.
 //
 #define TRACK_AIRCRAFT_NO_POS_TTL (2*60000)

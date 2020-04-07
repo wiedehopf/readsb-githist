@@ -2196,7 +2196,7 @@ static void calc_wind(struct aircraft *a, uint64_t now) {
     uint32_t focus = 0xc0ffeeba;
 
     if (a->addr == focus)
-        fprintf(stderr, "%lu %lu %lu %lu\n", trackDataAge(now, &a->tas_valid), trackDataAge(now, &a->true_heading_valid),
+        fprintf(stderr, "%"PRIu64" %"PRIu64" %"PRIu64" %"PRIu64"\n", trackDataAge(now, &a->tas_valid), trackDataAge(now, &a->true_heading_valid),
                 trackDataAge(now, &a->gs_valid), trackDataAge(now, &a->track_valid));
 
     if (!trackDataValid(&a->position_valid) || a->airground == AG_GROUND)

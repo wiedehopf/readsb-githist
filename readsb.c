@@ -1099,13 +1099,13 @@ int main(int argc, char **argv) {
 #endif
 
     // Initialization
-    fprintf(stderr, "%lu\n", sizeof(struct state_flags));
-    fprintf(stderr, "%lu\n", sizeof(struct state));
-    fprintf(stderr, "%lu\n", sizeof(struct state_all));
-    //fprintf(stderr, "%lu\n", sizeof(struct modesMessage));
-    //fprintf(stderr, "%lu\n", sizeof(struct aircraft));
-    //fprintf(stderr, "%lu\n", sizeof(pthread_mutex_t));
-    //fprintf(stderr, "%lu\n", 10000 * sizeof(struct aircraft));
+    fprintf(stderr, "%zu\n", sizeof(struct state_flags));
+    fprintf(stderr, "%zu\n", sizeof(struct state));
+    fprintf(stderr, "%zu\n", sizeof(struct state_all));
+    //fprintf(stderr, "%zu\n", sizeof(struct modesMessage));
+    //fprintf(stderr, "%zu\n", sizeof(struct aircraft));
+    //fprintf(stderr, "%zu\n", sizeof(pthread_mutex_t));
+    //fprintf(stderr, "%zu\n", 10000 * sizeof(struct aircraft));
     log_with_timestamp("%s %s starting up.", MODES_READSB_VARIANT, MODES_READSB_VERSION);
     modesInit();
 
