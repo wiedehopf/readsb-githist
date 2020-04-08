@@ -1612,7 +1612,7 @@ static void trackRemoveStaleAircraft(struct aircraft **freeList) {
                 if (a->altitude_baro_valid.source == SOURCE_INVALID)
                     a->altitude_baro_reliable = 0;
 
-                if (a->pos_set && now > a->trace_next_fw) {
+                if (a->pos_set && now > a->trace_next_fw && a->trace_alloc != 0) {
                     a->trace_write = 1;
                     resize_trace(a, now);
                 }
@@ -2078,7 +2078,12 @@ static void resize_trace(struct aircraft *a, uint64_t now) {
             new_start = GLOBE_TRACE_SIZE / 64;
         }
 
-        new_start -= new_start % 4;
+        if (new_start != a->trace_len) {
+            new_start -= (new_start % 4);
+
+            if (new_start % 4 != 0)
+                fprintf(stderr, "not divisible by 4: %d %d\n", new_start, a->trace_len);
+        }
 
         pthread_mutex_lock(&a->trace_mutex);
 
