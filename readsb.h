@@ -363,7 +363,6 @@ struct
   char aneterr[ANET_ERR_LEN];
   int beast_fd; // Local Modes-S Beast handler
   struct net_service *services; // Active services
-  struct client *clients; // Our clients
   struct aircraft * volatile aircrafts[AIRCRAFTS_BUCKETS]; // pointers are volatile
   struct net_writer raw_out; // Raw output
   struct net_writer beast_out; // Beast-format output
