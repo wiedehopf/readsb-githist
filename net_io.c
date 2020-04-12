@@ -1803,6 +1803,21 @@ __attribute__ ((format(printf, 3, 4))) static char *safe_snprintf(char *p, char 
     return p;
 }
 
+static const char *cutOnSpace(const char *in, char *out, int len) {
+
+    for (int i = 0; i < len; i++) {
+        if (in[i] == ' ' || in[i] == '\0') {
+            out[i] = '\0';
+            break;
+        } else {
+            out[i] = in[i];
+        }
+    }
+
+    out[len-1] = '\0';
+
+    return out;
+}
 //
 //=========================================================================
 //
@@ -2983,7 +2998,9 @@ retry:
 
             if (trackDataValid(&a->callsign_valid)) {
                 char buf[128];
-                p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
+                char buf2[128];
+                const char *trimmed = cutOnSpace(a->callsign, buf2, sizeof(buf));
+                p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(trimmed, buf, sizeof(buf)));
                 p = safe_snprintf(p, end, ",\"CallSus\":false");
             }
 
