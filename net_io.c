@@ -992,14 +992,22 @@ static int decodeSbsLine(struct client *c, char *line, int remote) {
     char *out = NULL;
     size_t line_len = strlen(line);
 
-    if (mm.source == SOURCE_SBS)
+    if (mm.source == SOURCE_SBS) {
         out = prepareWrite(&Modes.sbs_out, 200);
-    if (mm.source == SOURCE_MLAT)
+        mm.addrtype = ADDR_OTHER;
+    }
+    if (mm.source == SOURCE_MLAT) {
         out = prepareWrite(&Modes.sbs_out_mlat, 200);
-    if (mm.source == SOURCE_JAERO)
+        mm.addrtype = ADDR_MLAT;
+    }
+    if (mm.source == SOURCE_JAERO) {
         out = prepareWrite(&Modes.sbs_out_jaero, 200);
-    if (mm.source == SOURCE_PRIO)
+        mm.addrtype = ADDR_JAERO;
+    }
+    if (mm.source == SOURCE_PRIO) {
         out = prepareWrite(&Modes.sbs_out_prio, 200);
+        mm.addrtype = ADDR_OTHER;
+    }
 
     if (out && line_len > 15 && line_len < 200) {
         memcpy(out, line, line_len);
@@ -1949,14 +1957,6 @@ const char *nav_modes_flags_string(nav_modes_t flags) {
 
 static const char *addrtype_enum_string(struct aircraft *a) {
     addrtype_t type = a->addrtype;
-
-    if (a->position_valid.source == SOURCE_JAERO)
-        return "jaero";
-    if (a->position_valid.source == SOURCE_MLAT)
-        return "mlat";
-    if (a->position_valid.source == SOURCE_SBS)
-        return "sbs_other";
-
     switch (type) {
         case ADDR_ADSB_ICAO_NT:
             return "adsb_icao_nt";
@@ -1972,16 +1972,16 @@ static const char *addrtype_enum_string(struct aircraft *a) {
             return "tisb_other";
         case ADDR_TISB_TRACKFILE:
             return "tisb_trackfile";
-
         case ADDR_ADSB_ICAO:
-
-            if (a->position_valid.source == SOURCE_INVALID)
-                return "mode_s";
-            if (a->position_valid.source == SOURCE_ADSB)
-                return "adsb_icao";
-
-            return "unknown";
-
+            return "adsb_icao";
+        case ADDR_JAERO:
+            return "jaero";
+        case ADDR_MLAT:
+            return "mlat";
+        case ADDR_OTHER:
+            return "other";
+        case ADDR_MODE_S:
+            return "mode_s";
         default:
             return "unknown";
     }

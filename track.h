@@ -256,7 +256,7 @@ struct aircraft
   double trace_llon; // last saved lon
 
   uint64_t trace_next_fw;
-  double padding2_01;
+  uint64_t addrtype_updated;
   double padding2_02;
   double padding2_03;
 

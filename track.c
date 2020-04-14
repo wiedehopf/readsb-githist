@@ -644,9 +644,6 @@ static void updatePosition(struct aircraft *a, struct modesMessage *mm) {
         mm->decoded_nic = new_nic;
         mm->decoded_rc = new_rc;
 
-        // update addrtype, we use the type from the accepted position.
-        a->addrtype = mm->addrtype;
-
         globe_stuff(a, mm, new_lat, new_lon, mm->sysTimestampMsg);
 
         // Update aircraft state
@@ -1009,9 +1006,16 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         a->first_message = NULL;
     }
 
-    // update addrtype, we only ever go towards "more direct" types
-    if (mm->addrtype < a->addrtype && now > 30 * 1000 +  a->position_valid.updated)  {
-        a->addrtype = mm->addrtype;
+    // update addrtype
+    if ((mm->addrtype > a->addrtype && now > 90 * 1000 + a->addrtype_updated)
+            || (mm->addrtype <= a->addrtype && now > 30 * 1000 + a->addrtype_updated)) {
+
+        if (mm->source == SOURCE_MODE_S_CHECKED || mm->source == SOURCE_MODE_S)
+            a->addrtype = ADDR_MODE_S;
+        else
+            a->addrtype = mm->addrtype;
+
+        a->addrtype_updated = now;
     }
 
     // decide on where to stash the version
@@ -1398,8 +1402,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
             }
             // speed check failed, do nothing
         } else if (accept_data(&a->position_valid, mm->source, mm, 0)) {
-            // update addrtype, we use the type from the accepted position.
-            a->addrtype = mm->addrtype;
 
             int persist = Modes.filter_persistence;
             a->pos_reliable_odd = min(a->pos_reliable_odd + 1, persist);
@@ -1707,6 +1709,11 @@ static void globe_stuff(struct aircraft *a, struct modesMessage *mm, double new_
     if ((a->pos_reliable_odd < 2 || a->pos_reliable_even < 2)
             && (mm->source > SOURCE_JAERO || now < a->seen_pos + 60 * 1000))
         return;
+
+    // update addrtype, we use the type from the accepted position.
+    a->addrtype = mm->addrtype;
+    a->addrtype_updated = now;
+
 
     if (trackDataAge(now, &a->track_valid) >= 10000 && a->pos_set) {
         double distance = greatcircle(a->lat, a->lon, new_lat, new_lon);
