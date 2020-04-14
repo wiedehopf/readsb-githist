@@ -1811,18 +1811,21 @@ __attribute__ ((format(printf, 3, 4))) static char *safe_snprintf(char *p, char 
     return p;
 }
 
-static const char *cutOnSpace(const char *in, char *out, int len) {
+static const char *trimSpace(const char *in, char *out, int len) {
 
-    for (int i = 0; i < len; i++) {
-        if (in[i] == ' ' || in[i] == '\0') {
+    out[len] = '\0';
+    int found = 0;
+
+    for (int i = len - 1; i >= 0; i--) {
+        if (!found && in[i] == ' ') {
             out[i] = '\0';
-            break;
+        } else if (in[i] == '\0') {
+            out[i] = '\0';
         } else {
             out[i] = in[i];
+            found = 1; // found non space character
         }
     }
-
-    out[len-1] = '\0';
 
     return out;
 }
@@ -3015,10 +3018,12 @@ retry:
 
             if (trackDataValid(&a->callsign_valid)) {
                 char buf[128];
-                char buf2[128];
-                const char *trimmed = cutOnSpace(a->callsign, buf2, sizeof(buf));
-                p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(trimmed, buf, sizeof(buf)));
-                p = safe_snprintf(p, end, ",\"CallSus\":false");
+                char buf2[16];
+                const char *trimmed = trimSpace(a->callsign, buf2, 8);
+                if (trimmed[0] != 0) {
+                    p = safe_snprintf(p, end, ",\"Call\":\"%s\"", jsonEscapeString(trimmed, buf, sizeof(buf)));
+                    p = safe_snprintf(p, end, ",\"CallSus\":false");
+                }
             }
 
             if (trackDataValid(&a->nav_heading_valid))
