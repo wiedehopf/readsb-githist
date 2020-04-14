@@ -86,7 +86,7 @@ static struct aircraft *trackCreateAircraft(struct modesMessage *mm) {
 
     // Now initialise things that should not be 0/NULL to their defaults
     a->addr = mm->addr;
-    a->addrtype = mm->addrtype;
+    a->addrtype = ADDR_UNKNOWN;
     for (i = 0; i < 8; ++i)
         a->signalLevel[i] = 1e-5;
     a->signalNext = 0;
@@ -1007,7 +1007,8 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
     }
 
     // update addrtype
-    if ((mm->addrtype > a->addrtype && now > 90 * 1000 + a->addrtype_updated)
+    if (a->addrtype_updated > now
+            || (mm->addrtype > a->addrtype && now > 90 * 1000 + a->addrtype_updated)
             || (mm->addrtype <= a->addrtype && now > 30 * 1000 + a->addrtype_updated)) {
 
         if (mm->source == SOURCE_MODE_S_CHECKED || mm->source == SOURCE_MODE_S)
