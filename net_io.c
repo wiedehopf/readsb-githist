@@ -3129,11 +3129,11 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
         p = safe_snprintf(p, end, ",\"tas\":%u", a->tas);
     if (trackDataValid(&a->mach_valid))
         p = safe_snprintf(p, end, ",\"mach\":%.3f", a->mach);
-    if (a->wind_updated + 30000 > now && abs(a->wind_altitude - a->altitude_baro) < 500) {
+    if (now < a->wind_updated + TRACK_EXPIRE && abs(a->wind_altitude - a->altitude_baro) < 500) {
         p = safe_snprintf(p, end, ",\"wd\":%.0f", a->wind_direction);
         p = safe_snprintf(p, end, ",\"ws\":%.0f", a->wind_speed);
     }
-    if (a->oat_updated + 30000 > now)
+    if (now < a->oat_updated + TRACK_EXPIRE)
         p = safe_snprintf(p, end, ",\"oat\":%.1f", a->oat);
     if (trackDataValid(&a->track_valid))
         p = safe_snprintf(p, end, ",\"track\":%.2f", a->track);

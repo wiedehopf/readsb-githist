@@ -79,12 +79,14 @@
 
 #define ALTITUDE_BARO_RELIABLE_MAX 20
 
-#define TRACK_STALE (15*1000)
 // 15 seconds
-#define TRACK_EXPIRE (30*1000)
+#define TRACK_STALE (15*1000)
+// 45 seconds
+#define TRACK_EXPIRE (45*1000)
 // 70 seconds
-#define TRACK_EXPIRE_JAERO (33*60*1000)
+#define TRACK_EXPIRE_LONG (70*1000)
 // 33 minutes
+#define TRACK_EXPIRE_JAERO (33*60*1000)
 
 // data moves through three states:
 //  fresh: data is valid. Updates from a less reliable source are not accepted.
@@ -402,7 +404,7 @@ extern uint32_t modeAC_age[4096];
 
 /* is this bit of data valid? */
 static inline void
-updateValidity (data_validity *v, uint64_t now)
+updateValidity (data_validity *v, uint64_t now, uint64_t expiration_timeout)
 {
     if (v->source == SOURCE_INVALID)
         return;
@@ -411,7 +413,7 @@ updateValidity (data_validity *v, uint64_t now)
         if (now > v->updated + TRACK_EXPIRE_JAERO)
             v->source = SOURCE_INVALID;
     } else {
-        if (now > v->updated + TRACK_EXPIRE)
+        if (now > v->updated + expiration_timeout)
             v->source = SOURCE_INVALID;
     }
 }
