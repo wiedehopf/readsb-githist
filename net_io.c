@@ -1978,7 +1978,7 @@ static const char *addrtype_enum_string(struct aircraft *a) {
         case ADDR_ADSB_ICAO:
             return "adsb_icao";
         case ADDR_JAERO:
-            return "jaero";
+            return "adsc";
         case ADDR_MLAT:
             return "mlat";
         case ADDR_OTHER:
