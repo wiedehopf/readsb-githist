@@ -2088,7 +2088,7 @@ struct char_buffer generateAircraftJson(int globe_index){
                 }
             }
             // don't include stale aircraft in the JSON
-            if (a->position_valid.source != SOURCE_JAERO && now > a->seen + 90 * 1000)
+            if (a->position_valid.source != SOURCE_JAERO && now > a->seen + 60 * 1000)
                 continue;
 
             if (first)
@@ -3212,10 +3212,12 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     if (trackDataValid(&a->spi_valid))
         p = safe_snprintf(p, end, ",\"spi\":%u", a->spi);
 
+    /*
     if (a->position_valid.source == SOURCE_JAERO)
         p = safe_snprintf(p, end, ",\"jaero\": true");
     if (a->position_valid.source == SOURCE_SBS)
         p = safe_snprintf(p, end, ",\"sbs_other\": true");
+    */
 
     p = safe_snprintf(p, end, ",\"mlat\":");
     p = append_flags(p, end, a, SOURCE_MLAT);
