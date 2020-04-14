@@ -1033,14 +1033,6 @@ struct aircraft *trackUpdateFromMessage(struct modesMessage *mm) {
         break;
     }
 
-    /*
-    if (mm->source == SOURCE_JAERO) {
-        adjustExpire(a, 33 * 60);
-    } else {
-        adjustExpire(a, 58);
-    }
-    */
-
     // assume version 0 until we see something else
     if (*message_version < 0) {
         *message_version = 0;

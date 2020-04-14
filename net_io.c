@@ -1947,10 +1947,17 @@ const char *nav_modes_flags_string(nav_modes_t flags) {
     return buf;
 }
 
-static const char *addrtype_enum_string(addrtype_t type) {
+static const char *addrtype_enum_string(struct aircraft *a) {
+    addrtype_t type = a->addrtype;
+
+    if (a->position_valid.source == SOURCE_JAERO)
+        return "jaero";
+    if (a->position_valid.source == SOURCE_MLAT)
+        return "mlat";
+    if (a->position_valid.source == SOURCE_SBS)
+        return "sbs_other";
+
     switch (type) {
-        case ADDR_ADSB_ICAO:
-            return "adsb_icao";
         case ADDR_ADSB_ICAO_NT:
             return "adsb_icao_nt";
         case ADDR_ADSR_ICAO:
@@ -1965,6 +1972,16 @@ static const char *addrtype_enum_string(addrtype_t type) {
             return "tisb_other";
         case ADDR_TISB_TRACKFILE:
             return "tisb_trackfile";
+
+        case ADDR_ADSB_ICAO:
+
+            if (a->position_valid.source == SOURCE_INVALID)
+                return "mode_s";
+            if (a->position_valid.source == SOURCE_ADSB)
+                return "adsb_icao";
+
+            return "unknown";
+
         default:
             return "unknown";
     }
@@ -3107,8 +3124,7 @@ static void *pthreadGetaddrinfo(void *param) {
 
 static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now) {
     p = safe_snprintf(p, end, "\n{\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
-    if (a->addrtype != ADDR_ADSB_ICAO)
-        p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a->addrtype));
+    p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a));
     if (trackDataValid(&a->callsign_valid)) {
         char buf[128];
         p = safe_snprintf(p, end, ",\"flight\":\"%s\"", jsonEscapeString(a->callsign, buf, sizeof(buf)));
