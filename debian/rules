@@ -25,10 +25,6 @@ ifneq ($(filter rtlsdr,$(DEB_BUILD_PROFILES)),)
 	CONFIG_SWITCH += 'RTLSDR=yes'
 endif
 
-ifneq ($(filter bladerf,$(DEB_BUILD_PROFILES)),)
-        CONFIG_SWITCH += 'BLADERF=yes'
-endif
-
 ifneq ($(filter plutosdr,$(DEB_BUILD_PROFILES)),)
         CONFIG_SWITCH += 'PLUTOSDR=yes'
 endif
