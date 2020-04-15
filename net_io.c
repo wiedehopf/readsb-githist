@@ -106,7 +106,7 @@ static void autoset_modeac();
 static int hexDigitVal(int c);
 static void *pthreadGetaddrinfo(void *param);
 
-static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now);
+static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now, int printState);
 static void flushClient(struct client *c, uint64_t now);
 
 //
@@ -2102,7 +2102,7 @@ struct char_buffer generateAircraftJson(int globe_index){
 retry:
             line_start = p;
 
-            p = sprintAircraftObject(p, end, a, now);
+            p = sprintAircraftObject(p, end, a, now, 0);
 
             if ((p + 100) >= end) { // +100 to leave some space for the final line
                 // overran the buffer
@@ -3127,7 +3127,7 @@ static void *pthreadGetaddrinfo(void *param) {
     return NULL;
 }
 
-static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now) {
+static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64_t now, int printState) {
     p = safe_snprintf(p, end, "\n{\"hex\":\"%s%06x\"", (a->addr & MODES_NON_ICAO_ADDRESS) ? "~" : "", a->addr & 0xFFFFFF);
     p = safe_snprintf(p, end, ",\"type\":\"%s\"", addrtype_enum_string(a));
     if (trackDataValid(&a->callsign_valid)) {
@@ -3137,12 +3137,12 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     if (trackDataValid(&a->airground_valid) && a->airground_valid.source >= SOURCE_MODE_S_CHECKED && a->airground == AG_GROUND)
         p = safe_snprintf(p, end, ",\"alt_baro\":\"ground\"");
     else {
-        if (trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= 3)
+        if (!printState && trackDataValid(&a->altitude_baro_valid) && a->altitude_baro_reliable >= 3)
             p = safe_snprintf(p, end, ",\"alt_baro\":%d", a->altitude_baro);
         if (trackDataValid(&a->altitude_geom_valid))
             p = safe_snprintf(p, end, ",\"alt_geom\":%d", a->altitude_geom);
     }
-    if (trackDataValid(&a->gs_valid))
+    if (!printState && trackDataValid(&a->gs_valid))
         p = safe_snprintf(p, end, ",\"gs\":%.1f", a->gs);
     if (trackDataValid(&a->ias_valid))
         p = safe_snprintf(p, end, ",\"ias\":%u", a->ias);
@@ -3156,10 +3156,12 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
     }
     if (now < a->oat_updated + TRACK_EXPIRE)
         p = safe_snprintf(p, end, ",\"oat\":%.1f", a->oat);
-    if (trackDataValid(&a->track_valid))
-        p = safe_snprintf(p, end, ",\"track\":%.2f", a->track);
-    else if (a->calc_track != 0)
-        p = safe_snprintf(p, end, ",\"calc_track\":%.1f", a->calc_track);
+    if (!printState) {
+        if (trackDataValid(&a->track_valid))
+            p = safe_snprintf(p, end, ",\"track\":%.2f", a->track);
+        else if (a->calc_track != 0)
+            p = safe_snprintf(p, end, ",\"calc_track\":%.1f", a->calc_track);
+    }
     if (trackDataValid(&a->track_rate_valid))
         p = safe_snprintf(p, end, ",\"track_rate\":%.2f", a->track_rate);
     if (trackDataValid(&a->roll_valid))
@@ -3191,11 +3193,16 @@ static char *sprintAircraftObject(char *p, char *end, struct aircraft *a, uint64
         p = append_nav_modes(p, end, a->nav_modes, "\"", ",");
         p = safe_snprintf(p, end, "]");
     }
-    if (trackDataValid(&a->position_valid)
-            && ( (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2) || a->position_valid.source <= SOURCE_JAERO ) )
+    if (!printState && trackDataValid(&a->position_valid)
+            && ( (a->pos_reliable_odd >= 2 && a->pos_reliable_even >= 2) || a->position_valid.source <= SOURCE_JAERO ) ) {
         p = safe_snprintf(p, end, ",\"lat\":%f,\"lon\":%f,\"nic\":%u,\"rc\":%u,\"seen_pos\":%.1f",
                 a->lat, a->lon, a->pos_nic, a->pos_rc,
                 (now < a->position_valid.updated) ? 0 : ((now - a->position_valid.updated) / 1000.0));
+    }
+    if (printState && trackDataValid(&a->position_valid)) {
+        p = safe_snprintf(p, end, ",\"nic\":%u,\"rc\":%u",
+                a->pos_nic, a->pos_rc);
+    }
     if (a->adsb_version >= 0)
         p = safe_snprintf(p, end, ",\"version\":%d", a->adsb_version);
     if (trackDataValid(&a->nic_baro_valid))

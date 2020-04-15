@@ -2127,6 +2127,9 @@ void to_state_all(struct aircraft *a, struct state_all *new, uint64_t now) {
             for (int i = 0; i < 8; i++)
                 new->callsign[i] = a->callsign[i];
 
+            new->pos_nic = a->pos_nic;
+            new->pos_rc = a->pos_rc;
+
             new->altitude_geom = (int16_t) (a->altitude_geom / 25);
             new->baro_rate = (int16_t) (a->baro_rate / 32);
             new->geom_rate = (int16_t) (a->geom_rate / 32);
@@ -2274,3 +2277,83 @@ static inline int declination (struct aircraft *a, double *dec) {
     return res;
 }
 
+void from_state_all(struct state_all *in, struct aircraft *a , uint64_t ts) {
+            for (int i = 0; i < 8; i++)
+                a->callsign[i] = in->callsign[i];
+            a->callsign[8] = '\0';
+
+            a->pos_nic = in->pos_nic;
+            a->pos_rc = in->pos_rc;
+
+            a->altitude_geom = in->altitude_geom * 25;
+            a->baro_rate = in->baro_rate * 32;
+            a->geom_rate = in->geom_rate * 32;
+            a->ias = in->ias;
+            a->tas = in->tas;
+
+            a->squawk = in->squawk;
+            a->category =  in->category; // Aircraft category A0 - D7 encoded as a single hex byte. 00 = unset
+            a->nav_altitude_mcp = in->nav_altitude_mcp * 32;
+            a->nav_altitude_fms = in->nav_altitude_fms * 32;
+
+            a->nav_qnh = in->nav_qnh / 10.0;
+            a->nav_heading = in->nav_heading / 10.0;
+            a->gs = in->gs / 10.0;
+            a->mach = in->mach / 1000.0;
+            a->track = in->track / 10.0;
+            a->track_rate = in->track_rate / 100.0;
+            a->roll = in->roll / 100.0;
+            a->mag_heading = in->mag_heading / 10.0;
+            a->true_heading = in->true_heading / 10.0;
+
+            a->emergency = in->emergency;
+            a->airground = in->airground;
+            a->addrtype = in->addrtype;
+            a->nav_modes = in->nav_modes;
+            a->nav_altitude_src = in->nav_altitude_src;
+            a->adsb_version = in->adsb_version;
+            a->adsr_version = in->adsr_version;
+            a->tisb_version = in->tisb_version;
+            a->sil_type = in->sil_type;
+
+
+            // giving this a timestamp is kinda hacky, do it anyway
+            // we want to be able to reuse the sprintAircraft routine for printing aircraft details
+#define F(f) do { a->f.source = (in->f ? SOURCE_INDIRECT : SOURCE_INVALID); a->f.updated = ts - 5000; } while (0)
+           F(callsign_valid);
+           F(altitude_baro_valid);
+           F(altitude_geom_valid);
+           F(geom_delta_valid);
+           F(gs_valid);
+           F(ias_valid);
+           F(tas_valid);
+           F(mach_valid);
+           F(track_valid);
+           F(track_rate_valid);
+           F(roll_valid);
+           F(mag_heading_valid);
+           F(true_heading_valid);
+           F(baro_rate_valid);
+           F(geom_rate_valid);
+           F(nic_a_valid);
+           F(nic_c_valid);
+           F(nic_baro_valid);
+           F(nac_p_valid);
+           F(nac_v_valid);
+           F(sil_valid);
+           F(gva_valid);
+           F(sda_valid);
+           F(squawk_valid);
+           F(emergency_valid);
+           F(airground_valid);
+           F(nav_qnh_valid);
+           F(nav_altitude_mcp_valid);
+           F(nav_altitude_fms_valid);
+           F(nav_altitude_src_valid);
+           F(nav_heading_valid);
+           F(nav_modes_valid);
+           F(position_valid);
+           F(alert_valid);
+           F(spi_valid);
+#undef F
+}
