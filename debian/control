@@ -10,7 +10,7 @@ Vcs-Git: https://github.com/mictronics/readsb.git
 
 Package: readsb
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, adduser, lighttpd
+Depends: ${shlibs:Depends}, ${misc:Depends}, adduser
 Description: ADS-B Ground Station System for various receiver hardware
  Networked Aviation Mode-S/ADS-B/TIS decoder/translator with support for RTL-SDR
  software defined radio USB devices, PlutoSDR, Modes-Beast
