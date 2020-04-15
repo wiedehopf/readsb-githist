@@ -11,7 +11,7 @@ CPPFLAGS += -DMODES_READSB_VERSION=\"$(READSB_VERSION)\" -DMODES_READSB_VARIANT=
 
 DIALECT = -std=c11
 CFLAGS += $(DIALECT) -O2 -march=native -g -W -D_DEFAULT_SOURCE -Wall -Werror
-LIBS = -pthread -lpthread -lm -lrt -lz
+LIBS = -lpthread -lm -lz
 
 ifeq ($(AGGRESSIVE), yes)
   CPPFLAGS += -DALLOW_AGGRESSIVE
